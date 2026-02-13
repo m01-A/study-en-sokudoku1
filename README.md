@@ -1,1 +1,0 @@
-# study-en-sokudoku1
