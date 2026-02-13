@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI英単語学習プロ+ (CSV Fix)</title>
+    <title>AI英単語学習プロ+ (Setup Fix)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
@@ -13,83 +13,82 @@
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .shake { animation: shake 0.5s linear; }
         @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+        .btn-active:active { transform: scale(0.96); transition: 0.1s; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen">
 
     <div id="app" class="max-w-4xl mx-auto p-4 md:p-8">
-        <!-- APIキー設定モーダル -->
+        <!-- API設定モーダル -->
         <div id="api-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 px-4 hidden">
             <div class="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full space-y-4">
                 <div class="flex items-center gap-2 text-indigo-600 font-bold text-xl"><i data-lucide="key"></i> API設定</div>
-                <p class="text-sm text-slate-500">Gemini APIを使用して例文生成や柔軟な判定を行います。</p>
                 <input type="password" id="api-key-input" placeholder="AIza..." class="w-full p-4 border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50">
-                <button onclick="saveApiKey()" class="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700">保存</button>
+                <button onclick="saveApiKey()" class="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 btn-active">保存</button>
                 <button onclick="document.getElementById('api-modal').classList.add('hidden')" class="w-full py-2 text-slate-400 text-sm">閉じる</button>
             </div>
         </div>
 
-        <!-- 読み込み中 / エラー表示 -->
+        <!-- 読み込み中 -->
         <div id="loading" class="flex flex-col items-center justify-center min-h-[60vh]">
             <div id="loading-spinner" class="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-indigo-600"></div>
-            <p id="loading-text" class="mt-4 text-slate-500 font-medium">CSVデータを読み込み中...</p>
+            <p id="loading-text" class="mt-4 text-slate-500 font-medium">読み込み中...</p>
         </div>
 
         <!-- 設定画面 -->
         <div id="setup-screen" class="hidden fade-in max-w-lg mx-auto bg-white p-8 rounded-3xl shadow-xl border border-slate-100 space-y-8">
             <div class="flex justify-between items-start">
-                <div>
-                    <h1 class="text-3xl font-black text-indigo-600 tracking-tight flex items-center gap-2">
-                        <i data-lucide="award"></i> Vocab Pro+
-                    </h1>
-                    <p class="text-slate-400 font-medium text-sm">履歴とお気に入りを同期中</p>
-                </div>
-                <button onclick="document.getElementById('api-modal').classList.remove('hidden')" class="p-2 text-slate-300 hover:text-indigo-500 transition-colors">
+                <h1 class="text-3xl font-black text-indigo-600 tracking-tight flex items-center gap-2">
+                    <i data-lucide="award"></i> Vocab Pro+
+                </h1>
+                <button onclick="document.getElementById('api-modal').classList.remove('hidden')" class="p-2 text-slate-300 hover:text-indigo-500">
                     <i data-lucide="settings"></i>
                 </button>
             </div>
 
             <div class="space-y-6">
-                <!-- フィルタ -->
+                <!-- フィルタ選択 -->
                 <div class="space-y-3">
                     <label class="text-xs font-bold text-slate-500 uppercase tracking-widest">出題対象</label>
-                    <div class="grid grid-cols-3 gap-2">
-                        <button onclick="setFilter('all')" id="filter-all" class="filter-btn py-3 rounded-xl text-xs font-bold border-2 border-indigo-600 bg-indigo-50 text-indigo-600">すべて</button>
-                        <button onclick="setFilter('wrong')" id="filter-wrong" class="filter-btn py-3 rounded-xl text-xs font-bold border-2 border-transparent bg-slate-50 text-slate-400">苦手のみ</button>
-                        <button onclick="setFilter('fav')" id="filter-fav" class="filter-btn py-3 rounded-xl text-xs font-bold border-2 border-transparent bg-slate-50 text-slate-400">お気に入り</button>
+                    <div class="grid grid-cols-3 gap-2" id="filter-group">
+                        <button onclick="setFilter('all')" id="filter-all" class="filter-btn py-3 rounded-xl text-xs font-bold border-2 transition-all border-indigo-600 bg-indigo-50 text-indigo-600">すべて</button>
+                        <button onclick="setFilter('wrong')" id="filter-wrong" class="filter-btn py-3 rounded-xl text-xs font-bold border-2 transition-all border-transparent bg-slate-50 text-slate-400">苦手のみ</button>
+                        <button onclick="setFilter('fav')" id="filter-fav" class="filter-btn py-3 rounded-xl text-xs font-bold border-2 transition-all border-transparent bg-slate-50 text-slate-400">お気に入り</button>
                     </div>
                     <p id="filter-stats" class="text-[10px] text-slate-400 text-center"></p>
                 </div>
 
-                <!-- 範囲設定 -->
-                <div id="range-settings" class="grid grid-cols-2 gap-4">
+                <!-- ID範囲設定 -->
+                <div id="range-settings-container" class="grid grid-cols-2 gap-4 transition-opacity">
                     <div class="space-y-2">
                         <label class="text-xs font-bold text-slate-500 uppercase">開始 ID</label>
-                        <input type="number" id="start-idx" value="1" class="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold">
+                        <input type="number" id="start-idx" value="1" class="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold focus:ring-2 focus:ring-indigo-100">
                     </div>
                     <div class="space-y-2">
                         <label class="text-xs font-bold text-slate-500 uppercase">終了 ID</label>
-                        <input type="number" id="end-idx" value="100" class="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold">
+                        <input type="number" id="end-idx" value="100" class="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold focus:ring-2 focus:ring-indigo-100">
                     </div>
                 </div>
 
+                <!-- 学習形式 -->
                 <div class="space-y-3">
                     <label class="text-xs font-bold text-slate-500 uppercase tracking-widest">学習形式</label>
-                    <select id="study-mode-select" onchange="updateFormatUI()" class="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none appearance-none">
+                    <select id="study-mode-select" onchange="updateFormatUI()" class="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none cursor-pointer border-2 border-transparent focus:border-indigo-100">
                         <option value="en-to-jp">英 ⇒ 日 (理解)</option>
                         <option value="jp-to-en">日 ⇒ 英 (スペル)</option>
                         <option value="fill-blank">例文穴埋め (AI)</option>
                     </select>
-                    <div id="format-options" class="grid grid-cols-3 gap-2 mt-2"></div>
+                    <!-- 詳細ボタン (選択肢/入力等) -->
+                    <div id="format-options-group" class="grid grid-cols-3 gap-2 mt-2"></div>
                 </div>
 
-                <div id="hint-option" class="hidden flex items-center gap-3 p-4 bg-amber-50 rounded-2xl text-amber-700">
-                    <input type="checkbox" id="use-hint" class="w-5 h-5 accent-amber-600">
-                    <label for="use-hint" class="text-sm font-bold">誤答時に1文字ヒントを表示</label>
+                <div id="hint-option-wrapper" class="hidden flex items-center gap-3 p-4 bg-amber-50 rounded-2xl text-amber-700">
+                    <input type="checkbox" id="use-hint" class="w-5 h-5 accent-amber-600 cursor-pointer">
+                    <label for="use-hint" class="text-sm font-bold cursor-pointer select-none">誤答時に1文字ヒントを表示</label>
                 </div>
             </div>
 
-            <button onclick="startStudy()" class="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-xl hover:bg-indigo-700 shadow-lg flex items-center justify-center gap-3">
+            <button onclick="startStudy()" class="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-xl hover:bg-indigo-700 shadow-lg flex items-center justify-center gap-3 btn-active">
                 <i data-lucide="play-circle"></i> 学習を開始
             </button>
         </div>
@@ -102,16 +101,16 @@
                     <button id="fav-toggle" onclick="toggleFavorite()" class="text-slate-300 hover:text-amber-400 transition-colors">
                         <i data-lucide="star" id="star-icon"></i>
                     </button>
-                    <button onclick="showSetup()" class="text-xs font-bold text-slate-400">中断</button>
+                    <button onclick="showSetup()" class="text-xs font-bold text-slate-400 hover:text-slate-600">中断</button>
                 </div>
             </div>
 
-            <div class="bg-white p-8 md:p-12 rounded-[40px] shadow-2xl border border-slate-100 text-center min-h-[480px] flex flex-col justify-center relative">
+            <div class="bg-white p-8 md:p-12 rounded-[40px] shadow-2xl border border-slate-100 text-center min-h-[500px] flex flex-col justify-center relative">
                 <div id="ai-status" class="hidden absolute top-6 left-0 right-0 animate-pulse text-indigo-500 text-[10px] font-bold">AI処理中...</div>
                 <div id="quiz-area" class="flex-grow flex flex-col justify-center"></div>
                 <div id="feedback-area" class="hidden mt-8 pt-8 border-t border-slate-50 fade-in"></div>
                 <div class="mt-8">
-                    <button id="action-btn" class="w-full py-5 bg-slate-900 text-white rounded-3xl font-black text-xl hover:bg-black shadow-xl"></button>
+                    <button id="action-btn" class="w-full py-5 bg-slate-900 text-white rounded-3xl font-black text-xl hover:bg-black shadow-xl btn-active"></button>
                 </div>
             </div>
         </div>
@@ -119,12 +118,12 @@
         <!-- 結果画面 -->
         <div id="result-screen" class="hidden max-w-2xl mx-auto text-center space-y-8">
             <div class="bg-white p-12 rounded-[40px] shadow-2xl border border-slate-100 space-y-6">
-                <h2 class="text-3xl font-black">Result</h2>
+                <h2 class="text-3xl font-black">学習終了！</h2>
                 <div id="final-score" class="text-7xl font-black text-indigo-600"></div>
                 <div id="wrong-list" class="text-left space-y-2 max-h-60 overflow-y-auto p-4 bg-slate-50 rounded-2xl hidden"></div>
                 <div class="flex flex-col gap-3 mt-10">
-                    <button onclick="startStudy()" class="w-full py-5 bg-indigo-600 text-white rounded-2xl font-bold">リトライ</button>
-                    <button onclick="showSetup()" class="w-full py-4 text-slate-400 font-bold">トップに戻る</button>
+                    <button onclick="startStudy()" class="w-full py-5 bg-indigo-600 text-white rounded-2xl font-bold btn-active">もう一度</button>
+                    <button onclick="showSetup()" class="w-full py-4 text-slate-400 font-bold hover:text-slate-600">トップに戻る</button>
                 </div>
             </div>
         </div>
@@ -139,6 +138,7 @@
         let currentIndex = 0;
         let results = [];
         let currentWord = null;
+        let isAnswering = false;
 
         let stats = JSON.parse(localStorage.getItem('STUDY_STATS') || "{}");
         let favorites = JSON.parse(localStorage.getItem('STUDY_FAVS') || "[]");
@@ -148,41 +148,24 @@
 
         const initIcons = () => lucide.createIcons();
 
-        // --- CSV読み込み (ファイル名候補を強化) ---
+        // CSV読み込み (複数候補)
         const loadCSV = async () => {
-            // あなたの現在のファイル名「words.xlsx - シート1.csv」を最優先に。
-            // ブラウザのエンコード(URI形式)も考慮。
-            const candidates = [
-                'words.xlsx%20-%20%E3%82%B7%E3%83%BC%E3%83%881.csv',
-                'words.xlsx - シート1.csv',
-                'words.csv',
-                './words.csv'
-            ];
-
+            const candidates = ['words.xlsx%20-%20%E3%82%B7%E3%83%BC%E3%83%881.csv', 'words.csv', './words.csv'];
             for (let name of candidates) {
                 try {
-                    console.log("Trying to load:", name);
                     const res = await fetch(name);
                     if (res.ok) {
                         const text = await res.text();
-                        return parseCSV(text);
+                        const lines = text.split(/\r?\n/).filter(l => l.trim());
+                        return lines.map(line => {
+                            const m = line.match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g) || [];
+                            const clean = (s) => (s || "").replace(/^"|"$/g, '').trim();
+                            return { id: parseInt(clean(m[0])), en: clean(m[1]), jp: clean(m[2]) };
+                        }).filter(w => !isNaN(w.id) && w.en && w.jp);
                     }
-                } catch (e) {
-                    console.warn("Fetch failed for:", name);
-                }
+                } catch (e) {}
             }
-            throw new Error("Could not find CSV file");
-        };
-
-        const parseCSV = (text) => {
-            const lines = text.split(/\r?\n/).filter(l => l.trim());
-            const data = lines.map(line => {
-                const m = line.match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g) || [];
-                const clean = (s) => (s || "").replace(/^"|"$/g, '').trim();
-                return { id: parseInt(clean(m[0])), en: clean(m[1]), jp: clean(m[2]) };
-            }).filter(w => !isNaN(w.id) && w.en && w.jp);
-            if(data.length === 0) throw new Error("Parsed data is empty");
-            return data;
+            throw new Error("CSVファイルが見つかりません。");
         };
 
         window.onload = async () => {
@@ -193,85 +176,88 @@
                 updateFormatUI();
                 showSetup();
             } catch (e) {
-                console.error(e);
                 document.getElementById('loading-spinner').classList.add('hidden');
-                document.getElementById('loading-text').innerHTML = `
-                    <div class="text-red-500 bg-red-50 p-6 rounded-2xl border border-red-100 max-w-sm">
-                        <p class="font-bold mb-2">CSVファイルが見つかりません</p>
-                        <p class="text-xs text-slate-500 leading-relaxed">
-                            リポジトリ内のファイル名が「words.xlsx - シート1.csv」または「words.csv」になっているか確認してください。<br><br>
-                            エラー詳細: ${e.message}
-                        </p>
-                        <button onclick="location.reload()" class="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-bold">再読み込み</button>
-                    </div>
-                `;
+                document.getElementById('loading-text').innerText = e.message;
             }
             initIcons();
         };
 
-        // --- 以下は前回のロジックと同じ ---
+        // フィルタ設定
         const setFilter = (mode) => {
             filterMode = mode;
             document.querySelectorAll('.filter-btn').forEach(b => {
-                b.classList.remove('border-indigo-600', 'bg-indigo-50', 'text-indigo-600');
-                b.classList.add('border-transparent', 'bg-slate-50', 'text-slate-400');
+                const isMatch = b.id === `filter-${mode}`;
+                b.className = `filter-btn py-3 rounded-xl text-xs font-bold border-2 transition-all ${isMatch ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-transparent bg-slate-50 text-slate-400'}`;
             });
-            document.getElementById(`filter-${mode}`).classList.add('border-indigo-600', 'bg-indigo-50', 'text-indigo-600');
-            document.getElementById('range-settings').style.opacity = mode === 'all' ? '1' : '0.5';
-            document.getElementById('range-settings').style.pointerEvents = mode === 'all' ? 'auto' : 'none';
+            // 「すべて」以外は範囲指定を無効化（視覚的）
+            const rangeUI = document.getElementById('range-settings-container');
+            rangeUI.style.opacity = mode === 'all' ? '1' : '0.4';
+            rangeUI.style.pointerEvents = mode === 'all' ? 'auto' : 'none';
         };
 
         const updateFilterStats = () => {
             const wrongCount = Object.values(stats).filter(s => s.wrong > 0).length;
             const favCount = favorites.length;
-            document.getElementById('filter-stats').innerText = `苦手: ${wrongCount} | お気に入り: ${favCount}`;
+            document.getElementById('filter-stats').innerText = `苦手: ${wrongCount}件 | お気に入り: ${favCount}件`;
         };
 
+        // 学習形式（大枠）の変更
         const updateFormatUI = () => {
             const mode = document.getElementById('study-mode-select').value;
-            const container = document.getElementById('format-options');
-            const hintOption = document.getElementById('hint-option');
-            hintOption.classList.add('hidden');
+            const container = document.getElementById('format-options-group');
+            const hintWrap = document.getElementById('hint-option-wrapper');
+            
+            hintWrap.classList.toggle('hidden', mode !== 'jp-to-en');
+            
             let html = '';
             if (mode === 'en-to-jp') {
                 html = `
-                    <button onclick="setFormat('choice')" id="fmt-choice" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 border-indigo-600 bg-indigo-50 text-indigo-600">選択肢</button>
-                    <button onclick="setFormat('input')" id="fmt-input" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 border-transparent bg-slate-50 text-slate-400">AI入力</button>
-                    <button onclick="setFormat('flash')" id="fmt-flash" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 border-transparent bg-slate-50 text-slate-400">カード</button>
+                    <button onclick="setFormat('choice')" id="fmt-choice" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 transition-all border-indigo-600 bg-indigo-50 text-indigo-600">選択肢</button>
+                    <button onclick="setFormat('input')" id="fmt-input" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 transition-all border-transparent bg-slate-50 text-slate-400">入力(AI)</button>
+                    <button onclick="setFormat('flash')" id="fmt-flash" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 transition-all border-transparent bg-slate-50 text-slate-400">カード</button>
                 `;
                 studyFormat = 'choice';
             } else if (mode === 'jp-to-en') {
                 html = `
-                    <button onclick="setFormat('input')" id="fmt-input" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 border-indigo-600 bg-indigo-50 text-indigo-600">入力</button>
-                    <button onclick="setFormat('flash')" id="fmt-flash" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 border-transparent bg-slate-50 text-slate-400">カード</button>
-                    <div></div>
+                    <button onclick="setFormat('input')" id="fmt-input" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 transition-all border-indigo-600 bg-indigo-50 text-indigo-600">スペル入力</button>
+                    <button onclick="setFormat('flash')" id="fmt-flash" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 transition-all border-transparent bg-slate-50 text-slate-400">カード</button>
+                    <div class="p-2"></div>
                 `;
                 studyFormat = 'input';
-                hintOption.classList.remove('hidden');
             } else {
-                html = `<div class="col-span-3 text-[10px] text-slate-400 py-2">AIが例文穴埋め問題を作成します</div>`;
+                html = `<div class="col-span-3 text-[10px] text-slate-400 py-4 border-2 border-dashed border-slate-100 rounded-xl">AIが作成した例文の穴埋め問題を行います。</div>`;
                 studyFormat = 'input';
             }
             container.innerHTML = html;
         };
 
+        // 詳細フォーマットの切り替え
         const setFormat = (fmt) => {
             studyFormat = fmt;
             document.querySelectorAll('.fmt-btn').forEach(b => {
-                b.classList.remove('border-indigo-600', 'bg-indigo-50', 'text-indigo-600');
-                b.classList.add('border-transparent', 'bg-slate-50', 'text-slate-400');
+                const isMatch = b.id === `fmt-${fmt}`;
+                b.className = `fmt-btn py-3 rounded-xl text-xs font-bold border-2 transition-all ${isMatch ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-transparent bg-slate-50 text-slate-400'}`;
             });
-            document.getElementById(`fmt-${fmt}`).classList.add('border-indigo-600', 'bg-indigo-50', 'text-indigo-600');
         };
 
         const startStudy = () => {
-            const start = parseInt(document.getElementById('start-idx').value);
-            const end = parseInt(document.getElementById('end-idx').value);
-            let pool = allWords;
-            if (filterMode === 'fav') pool = allWords.filter(w => favorites.includes(w.id));
-            else if (filterMode === 'wrong') pool = allWords.filter(w => stats[w.id]?.wrong > 0);
-            else pool = allWords.filter(w => w.id >= start && w.id <= end);
-            if (pool.length === 0) return alert("対象がありません");
+            const start = parseInt(document.getElementById('start-idx').value) || 1;
+            const end = parseInt(document.getElementById('end-idx').value) || 9999;
+            
+            let pool = [];
+            if (filterMode === 'fav') {
+                pool = allWords.filter(w => favorites.includes(w.id));
+            } else if (filterMode === 'wrong') {
+                pool = allWords.filter(w => stats[w.id]?.wrong > 0);
+            } else {
+                pool = allWords.filter(w => w.id >= start && w.id <= end);
+            }
+            
+            if (pool.length === 0) {
+                alert("条件に合う単語がありません。設定を確認してください。");
+                return;
+            }
+            
             quizList = [...pool].sort(() => Math.random() - 0.5);
             currentIndex = 0; results = [];
             document.getElementById('setup-screen').classList.add('hidden');
@@ -282,26 +268,43 @@
         const loadNext = async () => {
             if (currentIndex >= quizList.length) return finish();
             currentWord = quizList[currentIndex];
+            isAnswering = false;
+
             const area = document.getElementById('quiz-area');
             const feedback = document.getElementById('feedback-area');
             const actionBtn = document.getElementById('action-btn');
             const status = document.getElementById('ai-status');
+
             document.getElementById('progress-text').innerText = `${currentIndex + 1} / ${quizList.length}`;
             document.getElementById('star-icon').style.fill = favorites.includes(currentWord.id) ? "currentColor" : "none";
             document.getElementById('fav-toggle').classList.toggle('text-amber-400', favorites.includes(currentWord.id));
-            feedback.classList.add('hidden'); status.classList.add('hidden');
-            actionBtn.disabled = false; actionBtn.innerText = "CHECK";
+            
+            feedback.classList.add('hidden');
+            status.classList.add('hidden');
+            actionBtn.classList.remove('hidden');
+            actionBtn.disabled = false;
+            actionBtn.innerText = "CHECK";
+
             const mode = document.getElementById('study-mode-select').value;
-            if (studyFormat === 'flash') renderFlash(area, actionBtn, mode);
-            else if (studyFormat === 'choice') renderChoices(area, actionBtn);
-            else if (studyFormat === 'input') {
+
+            if (studyFormat === 'flash') {
+                renderFlash(area, actionBtn, mode);
+            } else if (studyFormat === 'choice') {
+                renderChoices(area, actionBtn);
+            } else {
                 if (mode === 'fill-blank') {
-                    status.classList.remove('hidden'); actionBtn.disabled = true;
-                    const s = await callAI(`単語 "${currentWord.en}" を使った短い例文を1組JSONで: {"english": "sentence", "japanese": "訳", "cloze": "____ version"}`, true);
+                    status.classList.remove('hidden'); 
+                    actionBtn.disabled = true;
+                    actionBtn.innerText = "AI PREPARING...";
+                    const s = await callAI(`単語 "${currentWord.en}" を使った短い英作文を1つ作成しJSON形式で返せ: {"english": "sentence", "japanese": "訳", "cloze": "____ version"}`, true);
                     currentWord.full = s.english;
-                    renderInput(area, actionBtn, s.cloze, s.japanese);
-                    status.classList.add('hidden'); actionBtn.disabled = false;
-                } else renderInput(area, actionBtn, mode === 'en-to-jp' ? currentWord.en : currentWord.jp);
+                    renderInput(area, actionBtn, s.cloze || "Error", s.japanese || "例文を取得できませんでした");
+                    status.classList.add('hidden'); 
+                    actionBtn.disabled = false;
+                    actionBtn.innerText = "CHECK";
+                } else {
+                    renderInput(area, actionBtn, mode === 'en-to-jp' ? currentWord.en : currentWord.jp);
+                }
             }
             initIcons();
         };
@@ -309,22 +312,41 @@
         const renderFlash = (area, btn, mode) => {
             const q = mode === 'en-to-jp' ? currentWord.en : currentWord.jp;
             const a = mode === 'en-to-jp' ? currentWord.jp : currentWord.en;
-            area.innerHTML = `<div onclick="this.querySelector('.back').classList.toggle('hidden')" class="w-full bg-slate-50 border-4 border-indigo-100 rounded-[40px] aspect-square flex flex-col items-center justify-center p-8 cursor-pointer shadow-inner"><div class="text-5xl font-black text-indigo-600 mb-4">${q}</div><div class="back hidden animate-fade-in text-2xl font-bold text-slate-500 pt-6 border-t w-full border-indigo-100">${a}</div></div><p class="mt-4 text-[10px] text-slate-300">タップで正解を表示</p>`;
+            area.innerHTML = `
+                <div onclick="this.querySelector('.back').classList.toggle('hidden')" class="w-full bg-slate-50 border-4 border-indigo-100 rounded-[40px] aspect-square flex flex-col items-center justify-center p-8 cursor-pointer shadow-inner btn-active">
+                    <div class="text-5xl font-black text-indigo-600 mb-4">${q}</div>
+                    <div class="back hidden animate-fade-in text-2xl font-bold text-slate-500 pt-6 border-t w-full border-indigo-100">${a}</div>
+                </div>
+                <p class="mt-4 text-[10px] text-slate-300 font-bold uppercase tracking-widest">Tap to Flip</p>
+            `;
             btn.innerText = "NEXT";
             btn.onclick = () => handleAnswer(true);
         };
 
         const renderChoices = (area, btn) => {
+            btn.classList.add('hidden');
             const correct = currentWord.jp;
             const dummies = allWords.filter(w => w.id !== currentWord.id).sort(() => Math.random() - 0.5).slice(0, 3).map(w => w.jp);
             const choices = [correct, ...dummies].sort(() => Math.random() - 0.5);
-            area.innerHTML = `<h2 class="text-6xl font-black text-slate-800 mb-12">${currentWord.en}</h2><div class="grid grid-cols-1 gap-3">${choices.map(c => `<button onclick="checkChoice('${c}', '${correct}')" class="choice-btn p-5 bg-slate-50 rounded-2xl font-bold text-left hover:bg-indigo-50 transition-all">${c}</button>`).join('')}</div>`;
-            btn.classList.add('hidden');
+            area.innerHTML = `
+                <h2 class="text-6xl font-black text-slate-800 mb-12">${currentWord.en}</h2>
+                <div class="grid grid-cols-1 gap-3">
+                    ${choices.map(c => `
+                        <button onclick="checkChoice('${c}', '${correct}')" class="choice-btn p-5 bg-slate-50 rounded-2xl font-bold text-left hover:bg-indigo-50 border-2 border-transparent hover:border-indigo-100 transition-all active:scale-[0.98]">
+                            ${c}
+                        </button>
+                    `).join('')}
+                </div>
+            `;
         };
 
         const renderInput = (area, btn, q, sub = "") => {
-            area.innerHTML = `<h2 class="${sub ? 'text-2xl italic text-slate-400 mb-4' : 'text-5xl font-black text-slate-800 mb-12'}">${q}</h2>${sub ? `<p class="text-indigo-600 font-bold mb-8">${sub}</p>` : ''}<input type="text" id="user-input" autocomplete="off" placeholder="解答..." class="w-full text-center text-4xl p-6 bg-slate-50 rounded-[30px] outline-none focus:ring-4 focus:ring-indigo-100 font-black"><div id="hint-area" class="mt-4 text-amber-500 font-bold h-6 text-sm"></div>`;
-            btn.classList.remove('hidden');
+            area.innerHTML = `
+                <h2 class="${sub ? 'text-2xl italic text-slate-400 mb-4' : 'text-5xl font-black text-slate-800 mb-12'}">${q}</h2>
+                ${sub ? `<p class="text-indigo-600 font-bold mb-8">${sub}</p>` : ''}
+                <input type="text" id="user-input" autocomplete="off" placeholder="解答を入力..." class="w-full text-center text-3xl p-6 bg-slate-50 rounded-[30px] outline-none focus:ring-4 focus:ring-indigo-100 font-black">
+                <div id="hint-area" class="mt-4 text-amber-500 font-bold h-6 text-sm"></div>
+            `;
             const input = document.getElementById('user-input');
             input.focus();
             input.onkeydown = (e) => { if(e.key === 'Enter') checkInput(); };
@@ -332,32 +354,43 @@
         };
 
         const checkChoice = (sel, cor) => {
+            if (isAnswering) return;
+            isAnswering = true;
             const ok = sel === cor;
             document.querySelectorAll('.choice-btn').forEach(b => {
                 b.disabled = true;
-                if(b.innerText === cor) b.classList.add('bg-green-100', 'text-green-700', 'border-green-200');
-                else if(b.innerText === sel) b.classList.add('bg-red-100', 'text-red-700', 'border-red-200');
+                if(b.innerText === cor) b.classList.add('ring-4', 'ring-green-400', 'bg-green-50', 'text-green-700');
+                else if(b.innerText === sel) b.classList.add('bg-red-50', 'text-red-400');
             });
             handleAnswer(ok);
         };
 
         const checkInput = async () => {
+            if (isAnswering) return;
             const val = document.getElementById('user-input').value.trim();
             if(!val) return;
+            
+            isAnswering = true;
             const mode = document.getElementById('study-mode-select').value;
             let ok = false;
-            if (mode === 'en-to-jp') {
+
+            if (mode === 'en-to-jp' && studyFormat === 'input') {
                 document.getElementById('ai-status').classList.remove('hidden');
-                const res = await callAI(`単語 "${currentWord.en}" の意味として "${val}" は正解ですか？定義: "${currentWord.jp}"。JSON: {"correct": true/false}`, true);
-                ok = res.correct;
+                const res = await callAI(`単語 "${currentWord.en}" の意味として "${val}" は正解ですか？定義: "${currentWord.jp}"。回答はJSONのみ: {"correct": true/false}`, true);
+                ok = !!res.correct;
                 document.getElementById('ai-status').classList.add('hidden');
-            } else ok = val.toLowerCase() === currentWord.en.toLowerCase();
+            } else {
+                ok = val.toLowerCase() === currentWord.en.toLowerCase();
+            }
 
             if (!ok && mode === 'jp-to-en' && document.getElementById('use-hint').checked && !document.getElementById('hint-area').innerText) {
-                document.getElementById('hint-area').innerText = `ヒント: "${currentWord.en[0]}..."`;
+                document.getElementById('hint-area').innerText = `ヒント: ${currentWord.en[0]}...`;
                 document.getElementById('user-input').classList.add('shake');
                 setTimeout(() => document.getElementById('user-input').classList.remove('shake'), 500);
-            } else handleAnswer(ok);
+                isAnswering = false; 
+            } else {
+                handleAnswer(ok);
+            }
         };
 
         const handleAnswer = (ok) => {
@@ -365,23 +398,36 @@
             const fb = document.getElementById('feedback-area');
             const input = document.getElementById('user-input');
             if(input) input.disabled = true;
+
             if(!stats[currentWord.id]) stats[currentWord.id] = { correct: 0, wrong: 0 };
             if(ok) stats[currentWord.id].correct++; else stats[currentWord.id].wrong++;
             localStorage.setItem('STUDY_STATS', JSON.stringify(stats));
+
             results.push({ ...currentWord, ok });
-            fb.classList.remove('hidden');
-            fb.innerHTML = ok ? `<div class="text-green-500 font-black text-2xl flex items-center justify-center gap-2"><i data-lucide="check"></i> CORRECT</div>` : `<div class="space-y-1"><p class="text-3xl font-black text-slate-800">${currentWord.en}</p><p class="text-indigo-600 font-bold">${currentWord.jp}</p></div>`;
-            if(currentWord.full) fb.innerHTML += `<p class="mt-4 text-[11px] text-slate-400 italic">"${currentWord.full}"</p>`;
-            btn.classList.remove('hidden'); btn.innerText = "NEXT";
+
+            btn.classList.remove('hidden');
+            btn.innerText = "NEXT";
             btn.onclick = () => { currentIndex++; loadNext(); };
+            
+            fb.classList.remove('hidden');
+            fb.innerHTML = ok ? 
+                `<div class="text-green-500 font-black text-2xl flex items-center justify-center gap-2"><i data-lucide="check-circle"></i> 正解！</div>` : 
+                `<div class="space-y-1"><p class="text-3xl font-black text-slate-800">${currentWord.en}</p><p class="text-indigo-600 font-bold">${currentWord.jp}</p></div>`;
+            
+            if(currentWord.full) fb.innerHTML += `<p class="mt-4 text-[11px] text-slate-400 italic font-medium">"${currentWord.full}"</p>`;
             initIcons();
+            btn.focus();
         };
 
         const toggleFavorite = () => {
-            if (favorites.includes(currentWord.id)) favorites = favorites.filter(id => id !== currentWord.id);
-            else favorites.push(currentWord.id);
+            if (favorites.includes(currentWord.id)) {
+                favorites = favorites.filter(id => id !== currentWord.id);
+            } else {
+                favorites.push(currentWord.id);
+            }
             localStorage.setItem('STUDY_FAVS', JSON.stringify(favorites));
-            document.getElementById('star-icon').style.fill = favorites.includes(currentWord.id) ? "currentColor" : "none";
+            const star = document.getElementById('star-icon');
+            star.style.fill = favorites.includes(currentWord.id) ? "currentColor" : "none";
             document.getElementById('fav-toggle').classList.toggle('text-amber-400', favorites.includes(currentWord.id));
         };
 
@@ -390,29 +436,35 @@
             document.getElementById('result-screen').classList.remove('hidden');
             const score = results.filter(r => r.ok).length;
             document.getElementById('final-score').innerText = `${score} / ${quizList.length}`;
+            
             const wrongOnes = results.filter(r => !r.ok);
             const list = document.getElementById('wrong-list');
             if (wrongOnes.length > 0) {
                 list.classList.remove('hidden');
-                list.innerHTML = `<p class="text-[10px] font-bold text-slate-400 uppercase mb-2">要復習</p>` + 
-                    wrongOnes.map(w => `<div class="flex justify-between items-center text-sm py-1 border-b border-slate-100"><span><b>${w.en}</b> ${w.jp}</span></div>`).join('');
-            } else list.classList.add('hidden');
+                list.innerHTML = `<p class="text-[10px] font-bold text-slate-400 uppercase mb-2 border-b pb-1">間違えた単語</p>` + 
+                    wrongOnes.map(w => `<div class="flex justify-between items-center text-sm py-2 border-b border-slate-50"><span><b class="text-indigo-600">${w.en}</b> <span class="text-slate-400 ml-2">${w.jp}</span></span></div>`).join('');
+            } else {
+                list.classList.add('hidden');
+            }
             updateFilterStats();
             initIcons();
         };
 
         const callAI = async (prompt, isJson = false) => {
-            if (!API_KEY) return isJson ? {correct: false} : "Error";
+            if (!API_KEY) return isJson ? {correct: false} : "API Key Required";
             try {
                 const res = await fetch(`${API_ENDPOINT}?key=${API_KEY}`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ contents: [{parts: [{text: prompt}]}], generationConfig: isJson ? { responseMimeType: "application/json" } : {} })
+                    body: JSON.stringify({
+                        contents: [{parts: [{text: prompt}]}],
+                        generationConfig: isJson ? { responseMimeType: "application/json" } : {}
+                    })
                 });
                 const data = await res.json();
                 const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
                 return isJson ? JSON.parse(text) : text;
-            } catch (e) { return isJson ? {correct: false} : "Error"; }
+            } catch (e) { return isJson ? {correct: false} : "AI Error"; }
         };
 
         const saveApiKey = () => {
@@ -425,6 +477,7 @@
             document.getElementById('setup-screen').classList.remove('hidden');
             document.getElementById('quiz-screen').classList.add('hidden');
             document.getElementById('result-screen').classList.add('hidden');
+            updateFilterStats();
             initIcons();
         };
     </script>
