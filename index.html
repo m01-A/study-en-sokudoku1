@@ -3,16 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI英単語学習プロ</title>
+    <title>AI英単語学習プロ+ (Stats & Bookmark)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+JP:wght@400;700&display=swap');
-        body { font-family: 'Inter', 'Noto Sans JP', sans-serif; }
-        .card-flip { transition: transform 0.6s; transform-style: preserve-3d; }
-        .is-flipped { transform: rotateY(180deg); }
-        .card-face { backface-visibility: hidden; }
-        .card-back { transform: rotateY(180deg); }
+        body { font-family: 'Inter', 'Noto Sans JP', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .shake { animation: shake 0.5s linear; }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen">
@@ -21,29 +21,28 @@
         <!-- APIキー設定モーダル -->
         <div id="api-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 px-4 hidden">
             <div class="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full space-y-4">
-                <div class="flex items-center gap-2 text-indigo-600 font-bold text-xl">
-                    <i data-lucide="key"></i> APIキーの設定
-                </div>
-                <p class="text-sm text-slate-500">日本語訳の柔軟な判定や例文生成にGemini APIを使用します。</p>
+                <div class="flex items-center gap-2 text-indigo-600 font-bold text-xl"><i data-lucide="key"></i> API設定</div>
+                <p class="text-sm text-slate-500">日本語訳の柔軟判定や例文生成にGemini APIを使用します。</p>
                 <input type="password" id="api-key-input" placeholder="AIza..." class="w-full p-4 border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50">
-                <button onclick="saveApiKey()" class="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all">保存する</button>
+                <button onclick="saveApiKey()" class="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700">保存</button>
+                <button onclick="document.getElementById('api-modal').classList.add('hidden')" class="w-full py-2 text-slate-400 text-sm">閉じる</button>
             </div>
         </div>
 
         <!-- 読み込み中 -->
         <div id="loading" class="flex flex-col items-center justify-center min-h-[60vh]">
             <div class="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-indigo-600"></div>
-            <p class="mt-4 text-slate-500 font-medium">単語リストを読み込み中...</p>
+            <p class="mt-4 text-slate-500 font-medium">データを読み込み中...</p>
         </div>
 
-        <!-- セットアップ画面 -->
-        <div id="setup-screen" class="hidden fade-in max-w-lg mx-auto bg-white p-8 rounded-3xl shadow-xl border border-slate-100 space-y-6">
+        <!-- 設定画面 -->
+        <div id="setup-screen" class="hidden fade-in max-w-lg mx-auto bg-white p-8 rounded-3xl shadow-xl border border-slate-100 space-y-8">
             <div class="flex justify-between items-start">
                 <div>
                     <h1 class="text-3xl font-black text-indigo-600 tracking-tight flex items-center gap-2">
-                        <i data-lucide="brain-circuit"></i> Study AI Pro
+                        <i data-lucide="award"></i> Vocab Pro+
                     </h1>
-                    <p class="text-slate-400 font-medium">学習スタイルをカスタマイズ</p>
+                    <p class="text-slate-400 font-medium text-sm">学習履歴とお気に入りを同期</p>
                 </div>
                 <button onclick="document.getElementById('api-modal').classList.remove('hidden')" class="p-2 text-slate-300 hover:text-indigo-500 transition-colors">
                     <i data-lucide="settings"></i>
@@ -51,8 +50,19 @@
             </div>
 
             <div class="space-y-6">
+                <!-- 出題対象フィルタ -->
+                <div class="space-y-3">
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-widest">出題対象</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button onclick="setFilter('all')" id="filter-all" class="filter-btn py-3 rounded-xl text-xs font-bold border-2 border-indigo-600 bg-indigo-50 text-indigo-600">すべて</button>
+                        <button onclick="setFilter('wrong')" id="filter-wrong" class="filter-btn py-3 rounded-xl text-xs font-bold border-2 border-transparent bg-slate-50 text-slate-400">苦手のみ</button>
+                        <button onclick="setFilter('fav')" id="filter-fav" class="filter-btn py-3 rounded-xl text-xs font-bold border-2 border-transparent bg-slate-50 text-slate-400">お気に入り</button>
+                    </div>
+                    <p id="filter-stats" class="text-[10px] text-slate-400 text-center"></p>
+                </div>
+
                 <!-- 範囲設定 -->
-                <div class="grid grid-cols-2 gap-4">
+                <div id="range-settings" class="grid grid-cols-2 gap-4">
                     <div class="space-y-2">
                         <label class="text-xs font-bold text-slate-500 uppercase">開始 ID</label>
                         <input type="number" id="start-idx" value="1" class="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold focus:ring-2 focus:ring-indigo-500">
@@ -65,37 +75,26 @@
 
                 <!-- モード選択 -->
                 <div class="space-y-3">
-                    <label class="text-xs font-bold text-slate-500 uppercase">学習の方向</label>
-                    <div class="grid grid-cols-3 gap-2">
-                        <button onclick="setDirection('en-to-jp')" id="dir-en" class="dir-btn py-3 rounded-xl text-sm font-bold border-2 border-indigo-600 bg-indigo-50 text-indigo-600">英 ⇒ 日</button>
-                        <button onclick="setDirection('jp-to-en')" id="dir-jp" class="dir-btn py-3 rounded-xl text-sm font-bold border-2 border-transparent bg-slate-50 text-slate-400">日 ⇒ 英</button>
-                        <button onclick="setDirection('fill-blank')" id="dir-fill" class="dir-btn py-3 rounded-xl text-sm font-bold border-2 border-transparent bg-slate-50 text-slate-400">穴埋め</button>
-                    </div>
-                </div>
-
-                <div class="space-y-3">
-                    <label class="text-xs font-bold text-slate-500 uppercase">回答形式</label>
-                    <div id="format-container" class="grid grid-cols-3 gap-2">
-                        <!-- 動的に書き換え -->
-                    </div>
-                </div>
-
-                <div id="hint-option-container" class="hidden flex items-center gap-3 p-4 bg-amber-50 rounded-2xl text-amber-700">
-                    <input type="checkbox" id="use-hint" class="w-5 h-5 accent-amber-600">
-                    <label for="use-hint" class="text-sm font-bold italic">間違えた時にヒント（1文字目）を表示</label>
-                </div>
-
-                <div class="space-y-2">
-                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">出題順序</label>
-                    <select id="order-type" class="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none appearance-none">
-                        <option value="random">ランダムに出題</option>
-                        <option value="sequential">番号順に出題</option>
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-widest">学習形式</label>
+                    <select id="study-mode-select" onchange="updateFormatUI()" class="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none appearance-none">
+                        <option value="en-to-jp">英 ⇒ 日 (理解)</option>
+                        <option value="jp-to-en">日 ⇒ 英 (スペル)</option>
+                        <option value="fill-blank">例文穴埋め (AI)</option>
                     </select>
+                    
+                    <div id="format-options" class="grid grid-cols-3 gap-2 mt-2">
+                        <!-- 動的に注入 -->
+                    </div>
+                </div>
+
+                <div id="hint-option" class="hidden flex items-center gap-3 p-4 bg-amber-50 rounded-2xl text-amber-700">
+                    <input type="checkbox" id="use-hint" class="w-5 h-5 accent-amber-600">
+                    <label for="use-hint" class="text-sm font-bold">誤答時に1文字ヒントを表示</label>
                 </div>
             </div>
 
-            <button onclick="startStudy()" class="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-xl hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-lg flex items-center justify-center gap-3">
-                <i data-lucide="graduation-cap"></i> 学習を始める
+            <button onclick="startStudy()" class="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-xl hover:bg-indigo-700 shadow-lg flex items-center justify-center gap-3">
+                <i data-lucide="play-circle"></i> 学習を開始
             </button>
         </div>
 
@@ -103,39 +102,41 @@
         <div id="quiz-screen" class="hidden max-w-2xl mx-auto space-y-6">
             <div class="flex justify-between items-center px-4">
                 <span id="progress-text" class="text-xs font-black text-indigo-500 bg-indigo-50 px-4 py-2 rounded-full"></span>
-                <button onclick="showSetup()" class="text-xs font-bold text-slate-400 hover:text-slate-600">中断</button>
+                <div class="flex items-center gap-4">
+                    <button id="fav-toggle" onclick="toggleFavorite()" class="text-slate-300 hover:text-amber-400 transition-colors">
+                        <i data-lucide="star" id="star-icon"></i>
+                    </button>
+                    <button onclick="showSetup()" class="text-xs font-bold text-slate-400">中断</button>
+                </div>
             </div>
 
-            <div class="bg-white p-8 md:p-12 rounded-[40px] shadow-2xl border border-slate-100 text-center min-h-[450px] flex flex-col justify-center relative">
-                <div id="ai-status" class="hidden absolute top-6 left-0 right-0 animate-pulse text-indigo-500 text-xs font-bold">
-                    <i data-lucide="sparkles" class="inline w-3 h-3 mb-1"></i> AIが判定・生成中...
+            <div class="bg-white p-8 md:p-12 rounded-[40px] shadow-2xl border border-slate-100 text-center min-h-[480px] flex flex-col justify-center relative">
+                <div id="ai-status" class="hidden absolute top-6 left-0 right-0 animate-pulse text-indigo-500 text-[10px] font-bold">
+                    AIが判定・生成中...
                 </div>
                 
-                <div id="quiz-area" class="flex-grow flex flex-col justify-center">
-                    <!-- クイズ内容がここに入る -->
-                </div>
-
-                <div id="feedback-area" class="hidden mt-8 pt-8 border-t border-slate-50 animate-fade-in">
-                    <!-- フィードバック -->
-                </div>
+                <div id="quiz-area" class="flex-grow flex flex-col justify-center"></div>
+                <div id="feedback-area" class="hidden mt-8 pt-8 border-t border-slate-50 fade-in"></div>
 
                 <div class="mt-8">
-                    <button id="action-btn" class="w-full py-5 bg-slate-900 text-white rounded-3xl font-black text-xl hover:bg-black transition-all shadow-xl"></button>
+                    <button id="action-btn" class="w-full py-5 bg-slate-900 text-white rounded-3xl font-black text-xl hover:bg-black shadow-xl"></button>
                 </div>
             </div>
         </div>
 
         <!-- 結果画面 -->
-        <div id="result-screen" class="hidden max-w-md mx-auto text-center space-y-8">
-            <div class="bg-white p-12 rounded-[40px] shadow-2xl border border-slate-100 space-y-6">
-                <div class="w-24 h-24 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto">
-                    <i data-lucide="trophy" class="w-12 h-12"></i>
-                </div>
-                <h2 class="text-3xl font-black">学習終了</h2>
+        <div id="result-screen" class="hidden max-w-2xl mx-auto space-y-8">
+            <div class="bg-white p-12 rounded-[40px] shadow-2xl text-center space-y-6">
+                <h2 class="text-3xl font-black">Result</h2>
                 <div id="final-score" class="text-7xl font-black text-indigo-600"></div>
+                
+                <div id="wrong-list" class="text-left space-y-2 max-h-60 overflow-y-auto p-4 bg-slate-50 rounded-2xl hidden">
+                    <p class="text-xs font-bold text-slate-400 uppercase mb-2">間違えた単語</p>
+                </div>
+
                 <div class="flex flex-col gap-3 mt-10">
-                    <button onclick="startStudy()" class="w-full py-5 bg-indigo-600 text-white rounded-2xl font-bold">もう一度挑戦</button>
-                    <button onclick="showSetup()" class="w-full py-4 text-slate-400 font-bold">設定に戻る</button>
+                    <button onclick="startStudy()" class="w-full py-5 bg-indigo-600 text-white rounded-2xl font-bold">リトライ</button>
+                    <button onclick="showSetup()" class="w-full py-4 text-slate-400 font-bold">トップに戻る</button>
                 </div>
             </div>
         </div>
@@ -144,31 +145,32 @@
     <script>
         const API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
         let API_KEY = localStorage.getItem('GEMINI_API_KEY') || "";
+        
         let allWords = [];
         let quizList = [];
         let currentIndex = 0;
         let results = [];
         let currentWord = null;
-        
-        // 設定ステート
-        let studyDirection = 'en-to-jp';
-        let studyFormat = 'choice'; // choice, input, flash
+
+        // 永続化データ
+        let stats = JSON.parse(localStorage.getItem('STUDY_STATS') || "{}");
+        let favorites = JSON.parse(localStorage.getItem('STUDY_FAVS') || "[]");
+
+        let filterMode = 'all'; // all, wrong, fav
+        let studyFormat = 'choice';
 
         const initIcons = () => lucide.createIcons();
 
-        // CSV読み込み
+        // --- Data Handling ---
         const loadCSV = async () => {
             const files = ['words.csv', 'words.xlsx - シート1.csv'];
             for (let f of files) {
                 try {
                     const res = await fetch(f);
-                    if (res.ok) {
-                        const text = await res.text();
-                        return parseCSV(text);
-                    }
+                    if (res.ok) return parseCSV(await res.text());
                 } catch (e) {}
             }
-            throw new Error("No CSV");
+            throw new Error("No CSV found");
         };
 
         const parseCSV = (text) => {
@@ -184,77 +186,85 @@
             try {
                 allWords = await loadCSV();
                 document.getElementById('end-idx').value = Math.max(...allWords.map(w => w.id));
-                setDirection('en-to-jp');
+                updateFilterStats();
+                updateFormatUI();
                 showSetup();
             } catch (e) {
-                document.getElementById('loading').innerHTML = `<p class="text-red-500 font-bold">CSV読み込み失敗。words.csvを配置してください。</p>`;
+                document.getElementById('loading').innerHTML = `<p class="text-red-500">CSVが見つかりません</p>`;
             }
             initIcons();
         };
 
-        // UI制御
-        const setDirection = (dir) => {
-            studyDirection = dir;
-            document.querySelectorAll('.dir-btn').forEach(b => b.classList.remove('border-indigo-600', 'bg-indigo-50', 'text-indigo-600'));
-            document.querySelectorAll('.dir-btn').forEach(b => b.classList.add('border-transparent', 'bg-slate-50', 'text-slate-400'));
+        // --- UI Logic ---
+        const setFilter = (mode) => {
+            filterMode = mode;
+            document.querySelectorAll('.filter-btn').forEach(b => {
+                b.classList.remove('border-indigo-600', 'bg-indigo-50', 'text-indigo-600');
+                b.classList.add('border-transparent', 'bg-slate-50', 'text-slate-400');
+            });
+            document.getElementById(`filter-${mode}`).classList.add('border-indigo-600', 'bg-indigo-50', 'text-indigo-600');
+            document.getElementById('range-settings').style.opacity = mode === 'all' ? '1' : '0.5';
+            document.getElementById('range-settings').style.pointerEvents = mode === 'all' ? 'auto' : 'none';
+        };
+
+        const updateFilterStats = () => {
+            const wrongCount = Object.values(stats).filter(s => s.wrong > 0).length;
+            const favCount = favorites.length;
+            document.getElementById('filter-stats').innerText = `苦手: ${wrongCount}件 | お気に入り: ${favCount}件`;
+        };
+
+        const updateFormatUI = () => {
+            const mode = document.getElementById('study-mode-select').value;
+            const container = document.getElementById('format-options');
+            const hintOption = document.getElementById('hint-option');
             
-            const activeId = dir === 'en-to-jp' ? 'dir-en' : (dir === 'jp-to-en' ? 'dir-jp' : 'dir-fill');
-            const btn = document.getElementById(activeId);
-            btn.classList.add('border-indigo-600', 'bg-indigo-50', 'text-indigo-600');
-            btn.classList.remove('border-transparent', 'bg-slate-50', 'text-slate-400');
+            hintOption.classList.add('hidden');
+            let html = '';
 
-            const formatCont = document.getElementById('format-container');
-            const hintCont = document.getElementById('hint-option-container');
-            hintCont.classList.add('hidden');
-
-            if (dir === 'en-to-jp') {
-                formatCont.innerHTML = `
-                    <button onclick="setFormat('flash')" id="fmt-flash" class="fmt-btn py-3 rounded-xl text-sm font-bold border-2 border-transparent bg-slate-50 text-slate-400">フラッシュ</button>
-                    <button onclick="setFormat('choice')" id="fmt-choice" class="fmt-btn py-3 rounded-xl text-sm font-bold border-2 border-indigo-600 bg-indigo-50 text-indigo-600">選択形式</button>
-                    <button onclick="setFormat('input')" id="fmt-input" class="fmt-btn py-3 rounded-xl text-sm font-bold border-2 border-transparent bg-slate-50 text-slate-400">入力形式</button>
+            if (mode === 'en-to-jp') {
+                html = `
+                    <button onclick="setFormat('choice')" id="fmt-choice" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 border-indigo-600 bg-indigo-50 text-indigo-600">選択肢</button>
+                    <button onclick="setFormat('input')" id="fmt-input" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 border-transparent bg-slate-50 text-slate-400">AI入力</button>
+                    <button onclick="setFormat('flash')" id="fmt-flash" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 border-transparent bg-slate-50 text-slate-400">カード</button>
                 `;
                 studyFormat = 'choice';
-            } else if (dir === 'jp-to-en') {
-                formatCont.innerHTML = `
-                    <button onclick="setFormat('flash')" id="fmt-flash" class="fmt-btn py-3 rounded-xl text-sm font-bold border-2 border-transparent bg-slate-50 text-slate-400">フラッシュ</button>
-                    <button onclick="setFormat('input')" id="fmt-input" class="fmt-btn py-3 rounded-xl text-sm font-bold border-2 border-indigo-600 bg-indigo-50 text-indigo-600">入力形式</button>
+            } else if (mode === 'jp-to-en') {
+                html = `
+                    <button onclick="setFormat('input')" id="fmt-input" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 border-indigo-600 bg-indigo-50 text-indigo-600">入力</button>
+                    <button onclick="setFormat('flash')" id="fmt-flash" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 border-transparent bg-slate-50 text-slate-400">カード</button>
                     <div></div>
                 `;
                 studyFormat = 'input';
-                hintCont.classList.remove('hidden');
+                hintOption.classList.remove('hidden');
             } else {
-                formatCont.innerHTML = `<p class="col-span-3 text-xs text-slate-400 py-3">AIが自動で穴埋め問題を作成します（入力式）</p>`;
+                html = `<div class="col-span-3 text-[10px] text-slate-400 py-2">AIが作成した例文の穴埋め問題に回答します</div>`;
                 studyFormat = 'input';
             }
+            container.innerHTML = html;
         };
 
         const setFormat = (fmt) => {
             studyFormat = fmt;
-            document.querySelectorAll('.fmt-btn').forEach(b => b.classList.remove('border-indigo-600', 'bg-indigo-50', 'text-indigo-600'));
-            document.querySelectorAll('.fmt-btn').forEach(b => b.classList.add('border-transparent', 'bg-slate-50', 'text-slate-400'));
+            document.querySelectorAll('.fmt-btn').forEach(b => {
+                b.classList.remove('border-indigo-600', 'bg-indigo-50', 'text-indigo-600');
+                b.classList.add('border-transparent', 'bg-slate-50', 'text-slate-400');
+            });
             document.getElementById(`fmt-${fmt}`).classList.add('border-indigo-600', 'bg-indigo-50', 'text-indigo-600');
         };
 
-        const saveApiKey = () => {
-            const v = document.getElementById('api-key-input').value.trim();
-            if (v) { API_KEY = v; localStorage.setItem('GEMINI_API_KEY', v); document.getElementById('api-modal').classList.add('hidden'); }
-        };
-
-        const showSetup = () => {
-            document.getElementById('loading').classList.add('hidden');
-            document.getElementById('setup-screen').classList.remove('hidden');
-            document.getElementById('quiz-screen').classList.add('hidden');
-            document.getElementById('result-screen').classList.add('hidden');
-            initIcons();
-        };
-
+        // --- Study Engine ---
         const startStudy = () => {
             const start = parseInt(document.getElementById('start-idx').value);
             const end = parseInt(document.getElementById('end-idx').value);
-            quizList = allWords.filter(w => w.id >= start && w.id <= end);
-            if (quizList.length === 0) return alert("範囲外です");
-            if (document.getElementById('order-type').value === 'random') quizList.sort(() => Math.random() - 0.5);
             
+            let pool = allWords;
+            if (filterMode === 'fav') pool = allWords.filter(w => favorites.includes(w.id));
+            else if (filterMode === 'wrong') pool = allWords.filter(w => stats[w.id]?.wrong > 0);
+            else pool = allWords.filter(w => w.id >= start && w.id <= end);
+
+            if (pool.length === 0) return alert("対象の単語がありません");
+            
+            quizList = [...pool].sort(() => Math.random() - 0.5);
             currentIndex = 0; results = [];
             document.getElementById('setup-screen').classList.add('hidden');
             document.getElementById('quiz-screen').classList.remove('hidden');
@@ -262,177 +272,191 @@
         };
 
         const loadNext = async () => {
-            if (currentIndex >= quizList.length) return showResults();
+            if (currentIndex >= quizList.length) return finish();
             currentWord = quizList[currentIndex];
+            
             const area = document.getElementById('quiz-area');
             const feedback = document.getElementById('feedback-area');
             const actionBtn = document.getElementById('action-btn');
-            const progress = document.getElementById('progress-text');
-            const aiStatus = document.getElementById('ai-status');
+            const status = document.getElementById('ai-status');
 
-            progress.innerText = `No. ${currentWord.id} | ${currentIndex + 1} / ${quizList.length}`;
-            feedback.classList.add('hidden');
-            feedback.innerHTML = '';
-            aiStatus.classList.add('hidden');
-            actionBtn.disabled = false;
+            // Reset UI
+            document.getElementById('progress-text').innerText = `${currentIndex + 1} / ${quizList.length}`;
+            document.getElementById('star-icon').style.fill = favorites.includes(currentWord.id) ? "currentColor" : "none";
+            document.getElementById('fav-toggle').classList.toggle('text-amber-400', favorites.includes(currentWord.id));
             
-            // 問題生成
+            feedback.classList.add('hidden');
+            status.classList.add('hidden');
+            actionBtn.disabled = false;
+            actionBtn.innerText = "CHECK";
+
+            const mode = document.getElementById('study-mode-select').value;
+
             if (studyFormat === 'flash') {
-                renderFlashcard(area, actionBtn);
+                renderFlash(area, actionBtn, mode);
             } else if (studyFormat === 'choice') {
                 renderChoices(area, actionBtn);
             } else if (studyFormat === 'input') {
-                if (studyDirection === 'fill-blank') {
-                    aiStatus.classList.remove('hidden'); actionBtn.disabled = true;
-                    const s = await callAI(`単語 "${currentWord.en}" を使った短い英文1組をJSONで: {"english": "sentence", "japanese": "訳", "cloze": "____ version"}`, true);
-                    currentWord.fullSentence = s.english;
-                    currentWord.cloze = s.cloze;
-                    currentWord.sentenceJp = s.japanese;
-                    aiStatus.classList.add('hidden'); actionBtn.disabled = false;
+                if (mode === 'fill-blank') {
+                    status.classList.remove('hidden'); actionBtn.disabled = true;
+                    const s = await callAI(`単語 "${currentWord.en}" を使った短い例文を1つJSONで: {"english": "sentence", "japanese": "訳", "cloze": "____ version"}`, true);
+                    currentWord.full = s.english;
                     renderInput(area, actionBtn, s.cloze, s.japanese);
+                    status.classList.add('hidden'); actionBtn.disabled = false;
                 } else {
-                    renderInput(area, actionBtn, (studyDirection === 'en-to-jp' ? currentWord.en : currentWord.jp));
+                    renderInput(area, actionBtn, mode === 'en-to-jp' ? currentWord.en : currentWord.jp);
                 }
             }
             initIcons();
         };
 
-        // 各形式の描画
-        const renderFlashcard = (area, btn) => {
-            const q = studyDirection === 'en-to-jp' ? currentWord.en : currentWord.jp;
-            const a = studyDirection === 'en-to-jp' ? currentWord.jp : currentWord.en;
+        const renderFlash = (area, btn, mode) => {
+            const q = mode === 'en-to-jp' ? currentWord.en : currentWord.jp;
+            const a = mode === 'en-to-jp' ? currentWord.jp : currentWord.en;
             area.innerHTML = `
-                <div id="card" class="card-flip w-full max-w-sm mx-auto aspect-[4/3] cursor-pointer" onclick="this.classList.toggle('is-flipped')">
-                    <div class="card-face absolute inset-0 bg-white border-4 border-indigo-100 rounded-[30px] flex items-center justify-center p-6 shadow-inner">
-                        <span class="text-5xl font-black text-indigo-600">${q}</span>
-                    </div>
-                    <div class="card-face card-back absolute inset-0 bg-indigo-600 rounded-[30px] flex items-center justify-center p-6 text-white shadow-xl">
-                        <span class="text-3xl font-bold">${a}</span>
-                    </div>
+                <div onclick="this.querySelector('.back').classList.toggle('hidden')" class="w-full bg-slate-50 border-4 border-indigo-100 rounded-[40px] aspect-square flex flex-col items-center justify-center p-8 cursor-pointer shadow-inner">
+                    <div class="text-5xl font-black text-indigo-600 mb-4">${q}</div>
+                    <div class="back hidden animate-fade-in text-2xl font-bold text-slate-500 pt-6 border-t w-full border-indigo-100">${a}</div>
                 </div>
-                <p class="mt-4 text-xs text-slate-400">カードをタップして裏返す</p>
+                <p class="mt-4 text-[10px] text-slate-300">タップして正解を表示</p>
             `;
-            btn.innerText = "次の単語へ";
-            btn.onclick = () => { results.push({...currentWord, correct: true}); currentIndex++; loadNext(); };
+            btn.innerText = "NEXT";
+            btn.onclick = () => { handleAnswer(true); };
         };
 
         const renderChoices = (area, btn) => {
-            const question = currentWord.en;
-            const correctJp = currentWord.jp;
-            // 他の単語からダミーを抽出
+            const correct = currentWord.jp;
             const dummies = allWords.filter(w => w.id !== currentWord.id).sort(() => Math.random() - 0.5).slice(0, 3).map(w => w.jp);
-            const choices = [correctJp, ...dummies].sort(() => Math.random() - 0.5);
-
+            const choices = [correct, ...dummies].sort(() => Math.random() - 0.5);
             area.innerHTML = `
-                <h2 class="text-6xl font-black text-slate-800 mb-10 tracking-tighter">${question}</h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    ${choices.map(c => `
-                        <button onclick="checkChoice('${c}', '${correctJp}')" class="choice-btn p-5 bg-slate-50 rounded-2xl font-bold text-lg hover:bg-indigo-50 hover:text-indigo-600 border-2 border-transparent hover:border-indigo-200 transition-all text-left flex items-center justify-between">
-                            <span>${c}</span>
-                            <i data-lucide="chevron-right" class="w-5 h-5 opacity-0"></i>
-                        </button>
-                    `).join('')}
+                <h2 class="text-6xl font-black text-slate-800 mb-12">${currentWord.en}</h2>
+                <div class="grid grid-cols-1 gap-3">
+                    ${choices.map(c => `<button onclick="checkChoice('${c}', '${correct}')" class="choice-btn p-5 bg-slate-50 rounded-2xl font-bold text-left hover:bg-indigo-50 transition-all">${c}</button>`).join('')}
                 </div>
             `;
             btn.classList.add('hidden');
         };
 
-        const renderInput = (area, btn, qText, subText = "") => {
+        const renderInput = (area, btn, q, sub = "") => {
             area.innerHTML = `
-                <h2 class="${subText ? 'text-2xl italic text-slate-500 font-serif mb-4' : 'text-5xl font-black text-slate-800 mb-10'}">${qText}</h2>
-                ${subText ? `<p class="text-indigo-600 font-bold mb-8">${subText}</p>` : ''}
-                <input type="text" id="user-input" autocomplete="off" placeholder="解答を入力..." class="w-full text-center text-4xl p-6 bg-slate-50 border-none rounded-[30px] outline-none focus:ring-4 focus:ring-indigo-100 font-black transition-all">
-                <div id="hint-area" class="mt-4 text-amber-500 font-bold h-6"></div>
+                <h2 class="${sub ? 'text-2xl italic text-slate-400 mb-4' : 'text-5xl font-black text-slate-800 mb-12'}">${q}</h2>
+                ${sub ? `<p class="text-indigo-600 font-bold mb-8">${sub}</p>` : ''}
+                <input type="text" id="user-input" autocomplete="off" placeholder="解答を入力..." class="w-full text-center text-4xl p-6 bg-slate-50 rounded-[30px] outline-none focus:ring-4 focus:ring-indigo-100 font-black">
+                <div id="hint-area" class="mt-4 text-amber-500 font-bold h-6 text-sm"></div>
             `;
+            btn.classList.remove('hidden');
             const input = document.getElementById('user-input');
             input.focus();
-            input.onkeydown = (e) => { if(e.key === 'Enter') handleInputCheck(); };
-            btn.classList.remove('hidden');
-            btn.innerText = "CHECK ANSWER";
-            btn.onclick = handleInputCheck;
+            input.onkeydown = (e) => { if(e.key === 'Enter') checkInput(); };
+            btn.onclick = checkInput;
         };
 
-        // ロジック
-        const checkChoice = (selected, correct) => {
-            const isCorrect = selected === correct;
-            const btns = document.querySelectorAll('.choice-btn');
-            btns.forEach(b => {
+        const checkChoice = (sel, cor) => {
+            const ok = sel === cor;
+            document.querySelectorAll('.choice-btn').forEach(b => {
                 b.disabled = true;
-                if(b.innerText.includes(correct)) b.classList.add('bg-green-100', 'border-green-500', 'text-green-700');
-                else if(b.innerText.includes(selected)) b.classList.add('bg-red-100', 'border-red-500', 'text-red-700');
+                if(b.innerText === cor) b.classList.add('bg-green-100', 'text-green-700', 'border-green-200');
+                else if(b.innerText === sel) b.classList.add('bg-red-100', 'text-red-700', 'border-red-200');
             });
-            
-            showFeedback(isCorrect, correct);
+            handleAnswer(ok);
         };
 
-        const handleInputCheck = async () => {
-            const input = document.getElementById('user-input');
-            const hintArea = document.getElementById('hint-area');
-            const userVal = input.value.trim();
-            if(!userVal) return;
-
-            const aiStatus = document.getElementById('ai-status');
-            const actionBtn = document.getElementById('action-btn');
+        const checkInput = async () => {
+            const val = document.getElementById('user-input').value.trim();
+            if(!val) return;
             
-            let isCorrect = false;
+            const mode = document.getElementById('study-mode-select').value;
+            let ok = false;
 
-            if (studyDirection === 'en-to-jp') {
-                // AI判定 (日本語の意味は幅が広いため)
-                aiStatus.classList.remove('hidden'); actionBtn.disabled = true;
-                const judge = await callAI(`単語 "${currentWord.en}" の意味として "${userVal}" は適切ですか？リストの定義は "${currentWord.jp}" です。JSON: {"correct": true/false}`, true);
-                isCorrect = judge.correct;
-                aiStatus.classList.add('hidden'); actionBtn.disabled = false;
+            if (mode === 'en-to-jp') {
+                document.getElementById('ai-status').classList.remove('hidden');
+                const res = await callAI(`単語 "${currentWord.en}" の意味として "${val}" は正解ですか？定義: "${currentWord.jp}"。JSON: {"correct": true/false}`, true);
+                ok = res.correct;
+                document.getElementById('ai-status').classList.add('hidden');
             } else {
-                // 日⇒英 or 穴埋め (スペル完全一致)
-                isCorrect = userVal.toLowerCase() === currentWord.en.toLowerCase();
+                ok = val.toLowerCase() === currentWord.en.toLowerCase();
             }
 
-            if (isCorrect) {
-                showFeedback(true, currentWord.en + " (" + currentWord.jp + ")");
+            if (!ok && mode === 'jp-to-en' && document.getElementById('use-hint').checked && !document.getElementById('hint-area').innerText) {
+                document.getElementById('hint-area').innerText = `ヒント: "${currentWord.en[0]}..."`;
+                document.getElementById('user-input').classList.add('shake');
+                setTimeout(() => document.getElementById('user-input').classList.remove('shake'), 500);
             } else {
-                if (studyDirection === 'jp-to-en' && document.getElementById('use-hint').checked && !hintArea.innerText) {
-                    hintArea.innerText = `ヒント: 最初の文字は "${currentWord.en[0]}" です`;
-                    input.classList.add('animate-shake');
-                    setTimeout(() => input.classList.remove('animate-shake'), 500);
-                } else {
-                    showFeedback(false, currentWord.en + " (" + currentWord.jp + ")");
-                }
+                handleAnswer(ok);
             }
         };
 
-        const showFeedback = (isCorrect, answer) => {
-            const feedback = document.getElementById('feedback-area');
-            const actionBtn = document.getElementById('action-btn');
+        const handleAnswer = (ok) => {
+            const mode = document.getElementById('study-mode-select').value;
+            const btn = document.getElementById('action-btn');
+            const fb = document.getElementById('feedback-area');
             const input = document.getElementById('user-input');
             if(input) input.disabled = true;
 
-            feedback.classList.remove('hidden');
-            feedback.innerHTML = isCorrect ? 
-                `<div class="text-green-500 font-black text-2xl flex items-center justify-center gap-2 animate-bounce"><i data-lucide="check-circle"></i> 正解！</div>` : 
-                `<div class="space-y-2"><p class="text-red-400 font-bold tracking-widest">不正解</p><p class="text-slate-800 text-3xl font-black">${answer}</p></div>`;
-            
-            if (currentWord.fullSentence) {
-                feedback.innerHTML += `<p class="mt-4 text-slate-400 italic text-sm">"${currentWord.fullSentence}"</p>`;
-            }
+            // Stats Update
+            if(!stats[currentWord.id]) stats[currentWord.id] = { correct: 0, wrong: 0 };
+            if(ok) stats[currentWord.id].correct++; else stats[currentWord.id].wrong++;
+            localStorage.setItem('STUDY_STATS', JSON.stringify(stats));
 
-            results.push({...currentWord, correct: isCorrect});
-            actionBtn.classList.remove('hidden');
-            actionBtn.innerText = "次へ";
-            actionBtn.onclick = () => { currentIndex++; loadNext(); };
-            actionBtn.focus();
+            results.push({ ...currentWord, ok });
+
+            fb.classList.remove('hidden');
+            fb.innerHTML = ok ? 
+                `<div class="text-green-500 font-black text-2xl flex items-center justify-center gap-2 animate-bounce"><i data-lucide="check"></i> CORRECT</div>` : 
+                `<div class="space-y-1"><p class="text-red-400 font-bold text-xs uppercase">Answer</p><p class="text-3xl font-black text-slate-800">${currentWord.en}</p><p class="text-indigo-600 font-bold">${currentWord.jp}</p></div>`;
+            
+            if(currentWord.full) fb.innerHTML += `<p class="mt-4 text-[11px] text-slate-400 italic">"${currentWord.full}"</p>`;
+
+            btn.classList.remove('hidden');
+            btn.innerText = "NEXT";
+            btn.onclick = () => { currentIndex++; loadNext(); };
+            btn.focus();
             initIcons();
         };
 
+        const toggleFavorite = () => {
+            if (favorites.includes(currentWord.id)) {
+                favorites = favorites.filter(id => id !== currentWord.id);
+            } else {
+                favorites.push(currentWord.id);
+            }
+            localStorage.setItem('STUDY_FAVS', JSON.stringify(favorites));
+            document.getElementById('star-icon').style.fill = favorites.includes(currentWord.id) ? "currentColor" : "none";
+            document.getElementById('fav-toggle').classList.toggle('text-amber-400', favorites.includes(currentWord.id));
+        };
+
+        const finish = () => {
+            document.getElementById('quiz-screen').classList.add('hidden');
+            document.getElementById('result-screen').classList.remove('hidden');
+            const score = results.filter(r => r.ok).length;
+            document.getElementById('final-score').innerText = `${score} / ${quizList.length}`;
+            
+            const wrongOnes = results.filter(r => !r.ok);
+            const list = document.getElementById('wrong-list');
+            if (wrongOnes.length > 0) {
+                list.classList.remove('hidden');
+                list.innerHTML = `<p class="text-[10px] font-bold text-slate-400 uppercase mb-2">要復習</p>` + 
+                    wrongOnes.map(w => `<div class="flex justify-between items-center text-sm py-1 border-b border-slate-100"><span><b>${w.en}</b> ${w.jp}</span><button onclick="addFavFromResult(${w.id})" class="text-slate-300"><i data-lucide="star" class="w-3 h-3"></i></button></div>`).join('');
+            } else {
+                list.classList.add('hidden');
+            }
+            updateFilterStats();
+            initIcons();
+        };
+
+        const addFavFromResult = (id) => {
+            if(!favorites.includes(id)) { favorites.push(id); localStorage.setItem('STUDY_FAVS', JSON.stringify(favorites)); }
+            updateFilterStats();
+            alert("お気に入りに追加しました");
+        };
+
         const callAI = async (prompt, isJson = false) => {
-            if (!API_KEY) return isJson ? {correct: false} : "API Key Error";
+            if (!API_KEY) return isJson ? {correct: false} : "Error";
             try {
                 const res = await fetch(`${API_ENDPOINT}?key=${API_KEY}`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        contents: [{parts: [{text: prompt}]}],
-                        generationConfig: isJson ? { responseMimeType: "application/json" } : {}
-                    })
+                    body: JSON.stringify({ contents: [{parts: [{text: prompt}]}], generationConfig: isJson ? { responseMimeType: "application/json" } : {} })
                 });
                 const data = await res.json();
                 const text = data.candidates[0].content.parts[0].text;
@@ -440,12 +464,9 @@
             } catch (e) { return isJson ? {correct: false} : "Error"; }
         };
 
-        const showResults = () => {
-            document.getElementById('quiz-screen').classList.add('hidden');
-            document.getElementById('result-screen').classList.remove('hidden');
-            const score = results.filter(r => r.correct).length;
-            document.getElementById('final-score').innerText = `${score} / ${quizList.length}`;
-            initIcons();
+        const saveApiKey = () => {
+            const v = document.getElementById('api-key-input').value.trim();
+            if(v) { API_KEY = v; localStorage.setItem('GEMINI_API_KEY', v); document.getElementById('api-modal').classList.add('hidden'); }
         };
     </script>
 </body>
