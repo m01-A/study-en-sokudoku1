@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI英単語学習プロ+ (Stats & Bookmark)</title>
+    <title>AI英単語学習プロ+ (CSV Fix)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
@@ -22,17 +22,17 @@
         <div id="api-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 px-4 hidden">
             <div class="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full space-y-4">
                 <div class="flex items-center gap-2 text-indigo-600 font-bold text-xl"><i data-lucide="key"></i> API設定</div>
-                <p class="text-sm text-slate-500">日本語訳の柔軟判定や例文生成にGemini APIを使用します。</p>
+                <p class="text-sm text-slate-500">Gemini APIを使用して例文生成や柔軟な判定を行います。</p>
                 <input type="password" id="api-key-input" placeholder="AIza..." class="w-full p-4 border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50">
                 <button onclick="saveApiKey()" class="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700">保存</button>
                 <button onclick="document.getElementById('api-modal').classList.add('hidden')" class="w-full py-2 text-slate-400 text-sm">閉じる</button>
             </div>
         </div>
 
-        <!-- 読み込み中 -->
+        <!-- 読み込み中 / エラー表示 -->
         <div id="loading" class="flex flex-col items-center justify-center min-h-[60vh]">
-            <div class="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-indigo-600"></div>
-            <p class="mt-4 text-slate-500 font-medium">データを読み込み中...</p>
+            <div id="loading-spinner" class="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-indigo-600"></div>
+            <p id="loading-text" class="mt-4 text-slate-500 font-medium">CSVデータを読み込み中...</p>
         </div>
 
         <!-- 設定画面 -->
@@ -42,7 +42,7 @@
                     <h1 class="text-3xl font-black text-indigo-600 tracking-tight flex items-center gap-2">
                         <i data-lucide="award"></i> Vocab Pro+
                     </h1>
-                    <p class="text-slate-400 font-medium text-sm">学習履歴とお気に入りを同期</p>
+                    <p class="text-slate-400 font-medium text-sm">履歴とお気に入りを同期中</p>
                 </div>
                 <button onclick="document.getElementById('api-modal').classList.remove('hidden')" class="p-2 text-slate-300 hover:text-indigo-500 transition-colors">
                     <i data-lucide="settings"></i>
@@ -50,7 +50,7 @@
             </div>
 
             <div class="space-y-6">
-                <!-- 出題対象フィルタ -->
+                <!-- フィルタ -->
                 <div class="space-y-3">
                     <label class="text-xs font-bold text-slate-500 uppercase tracking-widest">出題対象</label>
                     <div class="grid grid-cols-3 gap-2">
@@ -65,15 +65,14 @@
                 <div id="range-settings" class="grid grid-cols-2 gap-4">
                     <div class="space-y-2">
                         <label class="text-xs font-bold text-slate-500 uppercase">開始 ID</label>
-                        <input type="number" id="start-idx" value="1" class="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold focus:ring-2 focus:ring-indigo-500">
+                        <input type="number" id="start-idx" value="1" class="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold">
                     </div>
                     <div class="space-y-2">
                         <label class="text-xs font-bold text-slate-500 uppercase">終了 ID</label>
-                        <input type="number" id="end-idx" value="100" class="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold focus:ring-2 focus:ring-indigo-500">
+                        <input type="number" id="end-idx" value="100" class="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold">
                     </div>
                 </div>
 
-                <!-- モード選択 -->
                 <div class="space-y-3">
                     <label class="text-xs font-bold text-slate-500 uppercase tracking-widest">学習形式</label>
                     <select id="study-mode-select" onchange="updateFormatUI()" class="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none appearance-none">
@@ -81,10 +80,7 @@
                         <option value="jp-to-en">日 ⇒ 英 (スペル)</option>
                         <option value="fill-blank">例文穴埋め (AI)</option>
                     </select>
-                    
-                    <div id="format-options" class="grid grid-cols-3 gap-2 mt-2">
-                        <!-- 動的に注入 -->
-                    </div>
+                    <div id="format-options" class="grid grid-cols-3 gap-2 mt-2"></div>
                 </div>
 
                 <div id="hint-option" class="hidden flex items-center gap-3 p-4 bg-amber-50 rounded-2xl text-amber-700">
@@ -111,13 +107,9 @@
             </div>
 
             <div class="bg-white p-8 md:p-12 rounded-[40px] shadow-2xl border border-slate-100 text-center min-h-[480px] flex flex-col justify-center relative">
-                <div id="ai-status" class="hidden absolute top-6 left-0 right-0 animate-pulse text-indigo-500 text-[10px] font-bold">
-                    AIが判定・生成中...
-                </div>
-                
+                <div id="ai-status" class="hidden absolute top-6 left-0 right-0 animate-pulse text-indigo-500 text-[10px] font-bold">AI処理中...</div>
                 <div id="quiz-area" class="flex-grow flex flex-col justify-center"></div>
                 <div id="feedback-area" class="hidden mt-8 pt-8 border-t border-slate-50 fade-in"></div>
-
                 <div class="mt-8">
                     <button id="action-btn" class="w-full py-5 bg-slate-900 text-white rounded-3xl font-black text-xl hover:bg-black shadow-xl"></button>
                 </div>
@@ -125,15 +117,11 @@
         </div>
 
         <!-- 結果画面 -->
-        <div id="result-screen" class="hidden max-w-2xl mx-auto space-y-8">
-            <div class="bg-white p-12 rounded-[40px] shadow-2xl text-center space-y-6">
+        <div id="result-screen" class="hidden max-w-2xl mx-auto text-center space-y-8">
+            <div class="bg-white p-12 rounded-[40px] shadow-2xl border border-slate-100 space-y-6">
                 <h2 class="text-3xl font-black">Result</h2>
                 <div id="final-score" class="text-7xl font-black text-indigo-600"></div>
-                
-                <div id="wrong-list" class="text-left space-y-2 max-h-60 overflow-y-auto p-4 bg-slate-50 rounded-2xl hidden">
-                    <p class="text-xs font-bold text-slate-400 uppercase mb-2">間違えた単語</p>
-                </div>
-
+                <div id="wrong-list" class="text-left space-y-2 max-h-60 overflow-y-auto p-4 bg-slate-50 rounded-2xl hidden"></div>
                 <div class="flex flex-col gap-3 mt-10">
                     <button onclick="startStudy()" class="w-full py-5 bg-indigo-600 text-white rounded-2xl font-bold">リトライ</button>
                     <button onclick="showSetup()" class="w-full py-4 text-slate-400 font-bold">トップに戻る</button>
@@ -152,34 +140,49 @@
         let results = [];
         let currentWord = null;
 
-        // 永続化データ
         let stats = JSON.parse(localStorage.getItem('STUDY_STATS') || "{}");
         let favorites = JSON.parse(localStorage.getItem('STUDY_FAVS') || "[]");
 
-        let filterMode = 'all'; // all, wrong, fav
+        let filterMode = 'all'; 
         let studyFormat = 'choice';
 
         const initIcons = () => lucide.createIcons();
 
-        // --- Data Handling ---
+        // --- CSV読み込み (ファイル名候補を強化) ---
         const loadCSV = async () => {
-            const files = ['words.csv', 'words.xlsx - シート1.csv'];
-            for (let f of files) {
+            // あなたの現在のファイル名「words.xlsx - シート1.csv」を最優先に。
+            // ブラウザのエンコード(URI形式)も考慮。
+            const candidates = [
+                'words.xlsx%20-%20%E3%82%B7%E3%83%BC%E3%83%881.csv',
+                'words.xlsx - シート1.csv',
+                'words.csv',
+                './words.csv'
+            ];
+
+            for (let name of candidates) {
                 try {
-                    const res = await fetch(f);
-                    if (res.ok) return parseCSV(await res.text());
-                } catch (e) {}
+                    console.log("Trying to load:", name);
+                    const res = await fetch(name);
+                    if (res.ok) {
+                        const text = await res.text();
+                        return parseCSV(text);
+                    }
+                } catch (e) {
+                    console.warn("Fetch failed for:", name);
+                }
             }
-            throw new Error("No CSV found");
+            throw new Error("Could not find CSV file");
         };
 
         const parseCSV = (text) => {
             const lines = text.split(/\r?\n/).filter(l => l.trim());
-            return lines.map(line => {
+            const data = lines.map(line => {
                 const m = line.match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g) || [];
                 const clean = (s) => (s || "").replace(/^"|"$/g, '').trim();
                 return { id: parseInt(clean(m[0])), en: clean(m[1]), jp: clean(m[2]) };
             }).filter(w => !isNaN(w.id) && w.en && w.jp);
+            if(data.length === 0) throw new Error("Parsed data is empty");
+            return data;
         };
 
         window.onload = async () => {
@@ -190,12 +193,23 @@
                 updateFormatUI();
                 showSetup();
             } catch (e) {
-                document.getElementById('loading').innerHTML = `<p class="text-red-500">CSVが見つかりません</p>`;
+                console.error(e);
+                document.getElementById('loading-spinner').classList.add('hidden');
+                document.getElementById('loading-text').innerHTML = `
+                    <div class="text-red-500 bg-red-50 p-6 rounded-2xl border border-red-100 max-w-sm">
+                        <p class="font-bold mb-2">CSVファイルが見つかりません</p>
+                        <p class="text-xs text-slate-500 leading-relaxed">
+                            リポジトリ内のファイル名が「words.xlsx - シート1.csv」または「words.csv」になっているか確認してください。<br><br>
+                            エラー詳細: ${e.message}
+                        </p>
+                        <button onclick="location.reload()" class="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-bold">再読み込み</button>
+                    </div>
+                `;
             }
             initIcons();
         };
 
-        // --- UI Logic ---
+        // --- 以下は前回のロジックと同じ ---
         const setFilter = (mode) => {
             filterMode = mode;
             document.querySelectorAll('.filter-btn').forEach(b => {
@@ -210,17 +224,15 @@
         const updateFilterStats = () => {
             const wrongCount = Object.values(stats).filter(s => s.wrong > 0).length;
             const favCount = favorites.length;
-            document.getElementById('filter-stats').innerText = `苦手: ${wrongCount}件 | お気に入り: ${favCount}件`;
+            document.getElementById('filter-stats').innerText = `苦手: ${wrongCount} | お気に入り: ${favCount}`;
         };
 
         const updateFormatUI = () => {
             const mode = document.getElementById('study-mode-select').value;
             const container = document.getElementById('format-options');
             const hintOption = document.getElementById('hint-option');
-            
             hintOption.classList.add('hidden');
             let html = '';
-
             if (mode === 'en-to-jp') {
                 html = `
                     <button onclick="setFormat('choice')" id="fmt-choice" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 border-indigo-600 bg-indigo-50 text-indigo-600">選択肢</button>
@@ -237,7 +249,7 @@
                 studyFormat = 'input';
                 hintOption.classList.remove('hidden');
             } else {
-                html = `<div class="col-span-3 text-[10px] text-slate-400 py-2">AIが作成した例文の穴埋め問題に回答します</div>`;
+                html = `<div class="col-span-3 text-[10px] text-slate-400 py-2">AIが例文穴埋め問題を作成します</div>`;
                 studyFormat = 'input';
             }
             container.innerHTML = html;
@@ -252,18 +264,14 @@
             document.getElementById(`fmt-${fmt}`).classList.add('border-indigo-600', 'bg-indigo-50', 'text-indigo-600');
         };
 
-        // --- Study Engine ---
         const startStudy = () => {
             const start = parseInt(document.getElementById('start-idx').value);
             const end = parseInt(document.getElementById('end-idx').value);
-            
             let pool = allWords;
             if (filterMode === 'fav') pool = allWords.filter(w => favorites.includes(w.id));
             else if (filterMode === 'wrong') pool = allWords.filter(w => stats[w.id]?.wrong > 0);
             else pool = allWords.filter(w => w.id >= start && w.id <= end);
-
-            if (pool.length === 0) return alert("対象の単語がありません");
-            
+            if (pool.length === 0) return alert("対象がありません");
             quizList = [...pool].sort(() => Math.random() - 0.5);
             currentIndex = 0; results = [];
             document.getElementById('setup-screen').classList.add('hidden');
@@ -274,38 +282,26 @@
         const loadNext = async () => {
             if (currentIndex >= quizList.length) return finish();
             currentWord = quizList[currentIndex];
-            
             const area = document.getElementById('quiz-area');
             const feedback = document.getElementById('feedback-area');
             const actionBtn = document.getElementById('action-btn');
             const status = document.getElementById('ai-status');
-
-            // Reset UI
             document.getElementById('progress-text').innerText = `${currentIndex + 1} / ${quizList.length}`;
             document.getElementById('star-icon').style.fill = favorites.includes(currentWord.id) ? "currentColor" : "none";
             document.getElementById('fav-toggle').classList.toggle('text-amber-400', favorites.includes(currentWord.id));
-            
-            feedback.classList.add('hidden');
-            status.classList.add('hidden');
-            actionBtn.disabled = false;
-            actionBtn.innerText = "CHECK";
-
+            feedback.classList.add('hidden'); status.classList.add('hidden');
+            actionBtn.disabled = false; actionBtn.innerText = "CHECK";
             const mode = document.getElementById('study-mode-select').value;
-
-            if (studyFormat === 'flash') {
-                renderFlash(area, actionBtn, mode);
-            } else if (studyFormat === 'choice') {
-                renderChoices(area, actionBtn);
-            } else if (studyFormat === 'input') {
+            if (studyFormat === 'flash') renderFlash(area, actionBtn, mode);
+            else if (studyFormat === 'choice') renderChoices(area, actionBtn);
+            else if (studyFormat === 'input') {
                 if (mode === 'fill-blank') {
                     status.classList.remove('hidden'); actionBtn.disabled = true;
-                    const s = await callAI(`単語 "${currentWord.en}" を使った短い例文を1つJSONで: {"english": "sentence", "japanese": "訳", "cloze": "____ version"}`, true);
+                    const s = await callAI(`単語 "${currentWord.en}" を使った短い例文を1組JSONで: {"english": "sentence", "japanese": "訳", "cloze": "____ version"}`, true);
                     currentWord.full = s.english;
                     renderInput(area, actionBtn, s.cloze, s.japanese);
                     status.classList.add('hidden'); actionBtn.disabled = false;
-                } else {
-                    renderInput(area, actionBtn, mode === 'en-to-jp' ? currentWord.en : currentWord.jp);
-                }
+                } else renderInput(area, actionBtn, mode === 'en-to-jp' ? currentWord.en : currentWord.jp);
             }
             initIcons();
         };
@@ -313,37 +309,21 @@
         const renderFlash = (area, btn, mode) => {
             const q = mode === 'en-to-jp' ? currentWord.en : currentWord.jp;
             const a = mode === 'en-to-jp' ? currentWord.jp : currentWord.en;
-            area.innerHTML = `
-                <div onclick="this.querySelector('.back').classList.toggle('hidden')" class="w-full bg-slate-50 border-4 border-indigo-100 rounded-[40px] aspect-square flex flex-col items-center justify-center p-8 cursor-pointer shadow-inner">
-                    <div class="text-5xl font-black text-indigo-600 mb-4">${q}</div>
-                    <div class="back hidden animate-fade-in text-2xl font-bold text-slate-500 pt-6 border-t w-full border-indigo-100">${a}</div>
-                </div>
-                <p class="mt-4 text-[10px] text-slate-300">タップして正解を表示</p>
-            `;
+            area.innerHTML = `<div onclick="this.querySelector('.back').classList.toggle('hidden')" class="w-full bg-slate-50 border-4 border-indigo-100 rounded-[40px] aspect-square flex flex-col items-center justify-center p-8 cursor-pointer shadow-inner"><div class="text-5xl font-black text-indigo-600 mb-4">${q}</div><div class="back hidden animate-fade-in text-2xl font-bold text-slate-500 pt-6 border-t w-full border-indigo-100">${a}</div></div><p class="mt-4 text-[10px] text-slate-300">タップで正解を表示</p>`;
             btn.innerText = "NEXT";
-            btn.onclick = () => { handleAnswer(true); };
+            btn.onclick = () => handleAnswer(true);
         };
 
         const renderChoices = (area, btn) => {
             const correct = currentWord.jp;
             const dummies = allWords.filter(w => w.id !== currentWord.id).sort(() => Math.random() - 0.5).slice(0, 3).map(w => w.jp);
             const choices = [correct, ...dummies].sort(() => Math.random() - 0.5);
-            area.innerHTML = `
-                <h2 class="text-6xl font-black text-slate-800 mb-12">${currentWord.en}</h2>
-                <div class="grid grid-cols-1 gap-3">
-                    ${choices.map(c => `<button onclick="checkChoice('${c}', '${correct}')" class="choice-btn p-5 bg-slate-50 rounded-2xl font-bold text-left hover:bg-indigo-50 transition-all">${c}</button>`).join('')}
-                </div>
-            `;
+            area.innerHTML = `<h2 class="text-6xl font-black text-slate-800 mb-12">${currentWord.en}</h2><div class="grid grid-cols-1 gap-3">${choices.map(c => `<button onclick="checkChoice('${c}', '${correct}')" class="choice-btn p-5 bg-slate-50 rounded-2xl font-bold text-left hover:bg-indigo-50 transition-all">${c}</button>`).join('')}</div>`;
             btn.classList.add('hidden');
         };
 
         const renderInput = (area, btn, q, sub = "") => {
-            area.innerHTML = `
-                <h2 class="${sub ? 'text-2xl italic text-slate-400 mb-4' : 'text-5xl font-black text-slate-800 mb-12'}">${q}</h2>
-                ${sub ? `<p class="text-indigo-600 font-bold mb-8">${sub}</p>` : ''}
-                <input type="text" id="user-input" autocomplete="off" placeholder="解答を入力..." class="w-full text-center text-4xl p-6 bg-slate-50 rounded-[30px] outline-none focus:ring-4 focus:ring-indigo-100 font-black">
-                <div id="hint-area" class="mt-4 text-amber-500 font-bold h-6 text-sm"></div>
-            `;
+            area.innerHTML = `<h2 class="${sub ? 'text-2xl italic text-slate-400 mb-4' : 'text-5xl font-black text-slate-800 mb-12'}">${q}</h2>${sub ? `<p class="text-indigo-600 font-bold mb-8">${sub}</p>` : ''}<input type="text" id="user-input" autocomplete="off" placeholder="解答..." class="w-full text-center text-4xl p-6 bg-slate-50 rounded-[30px] outline-none focus:ring-4 focus:ring-indigo-100 font-black"><div id="hint-area" class="mt-4 text-amber-500 font-bold h-6 text-sm"></div>`;
             btn.classList.remove('hidden');
             const input = document.getElementById('user-input');
             input.focus();
@@ -364,62 +344,42 @@
         const checkInput = async () => {
             const val = document.getElementById('user-input').value.trim();
             if(!val) return;
-            
             const mode = document.getElementById('study-mode-select').value;
             let ok = false;
-
             if (mode === 'en-to-jp') {
                 document.getElementById('ai-status').classList.remove('hidden');
                 const res = await callAI(`単語 "${currentWord.en}" の意味として "${val}" は正解ですか？定義: "${currentWord.jp}"。JSON: {"correct": true/false}`, true);
                 ok = res.correct;
                 document.getElementById('ai-status').classList.add('hidden');
-            } else {
-                ok = val.toLowerCase() === currentWord.en.toLowerCase();
-            }
+            } else ok = val.toLowerCase() === currentWord.en.toLowerCase();
 
             if (!ok && mode === 'jp-to-en' && document.getElementById('use-hint').checked && !document.getElementById('hint-area').innerText) {
                 document.getElementById('hint-area').innerText = `ヒント: "${currentWord.en[0]}..."`;
                 document.getElementById('user-input').classList.add('shake');
                 setTimeout(() => document.getElementById('user-input').classList.remove('shake'), 500);
-            } else {
-                handleAnswer(ok);
-            }
+            } else handleAnswer(ok);
         };
 
         const handleAnswer = (ok) => {
-            const mode = document.getElementById('study-mode-select').value;
             const btn = document.getElementById('action-btn');
             const fb = document.getElementById('feedback-area');
             const input = document.getElementById('user-input');
             if(input) input.disabled = true;
-
-            // Stats Update
             if(!stats[currentWord.id]) stats[currentWord.id] = { correct: 0, wrong: 0 };
             if(ok) stats[currentWord.id].correct++; else stats[currentWord.id].wrong++;
             localStorage.setItem('STUDY_STATS', JSON.stringify(stats));
-
             results.push({ ...currentWord, ok });
-
             fb.classList.remove('hidden');
-            fb.innerHTML = ok ? 
-                `<div class="text-green-500 font-black text-2xl flex items-center justify-center gap-2 animate-bounce"><i data-lucide="check"></i> CORRECT</div>` : 
-                `<div class="space-y-1"><p class="text-red-400 font-bold text-xs uppercase">Answer</p><p class="text-3xl font-black text-slate-800">${currentWord.en}</p><p class="text-indigo-600 font-bold">${currentWord.jp}</p></div>`;
-            
+            fb.innerHTML = ok ? `<div class="text-green-500 font-black text-2xl flex items-center justify-center gap-2"><i data-lucide="check"></i> CORRECT</div>` : `<div class="space-y-1"><p class="text-3xl font-black text-slate-800">${currentWord.en}</p><p class="text-indigo-600 font-bold">${currentWord.jp}</p></div>`;
             if(currentWord.full) fb.innerHTML += `<p class="mt-4 text-[11px] text-slate-400 italic">"${currentWord.full}"</p>`;
-
-            btn.classList.remove('hidden');
-            btn.innerText = "NEXT";
+            btn.classList.remove('hidden'); btn.innerText = "NEXT";
             btn.onclick = () => { currentIndex++; loadNext(); };
-            btn.focus();
             initIcons();
         };
 
         const toggleFavorite = () => {
-            if (favorites.includes(currentWord.id)) {
-                favorites = favorites.filter(id => id !== currentWord.id);
-            } else {
-                favorites.push(currentWord.id);
-            }
+            if (favorites.includes(currentWord.id)) favorites = favorites.filter(id => id !== currentWord.id);
+            else favorites.push(currentWord.id);
             localStorage.setItem('STUDY_FAVS', JSON.stringify(favorites));
             document.getElementById('star-icon').style.fill = favorites.includes(currentWord.id) ? "currentColor" : "none";
             document.getElementById('fav-toggle').classList.toggle('text-amber-400', favorites.includes(currentWord.id));
@@ -430,24 +390,15 @@
             document.getElementById('result-screen').classList.remove('hidden');
             const score = results.filter(r => r.ok).length;
             document.getElementById('final-score').innerText = `${score} / ${quizList.length}`;
-            
             const wrongOnes = results.filter(r => !r.ok);
             const list = document.getElementById('wrong-list');
             if (wrongOnes.length > 0) {
                 list.classList.remove('hidden');
                 list.innerHTML = `<p class="text-[10px] font-bold text-slate-400 uppercase mb-2">要復習</p>` + 
-                    wrongOnes.map(w => `<div class="flex justify-between items-center text-sm py-1 border-b border-slate-100"><span><b>${w.en}</b> ${w.jp}</span><button onclick="addFavFromResult(${w.id})" class="text-slate-300"><i data-lucide="star" class="w-3 h-3"></i></button></div>`).join('');
-            } else {
-                list.classList.add('hidden');
-            }
+                    wrongOnes.map(w => `<div class="flex justify-between items-center text-sm py-1 border-b border-slate-100"><span><b>${w.en}</b> ${w.jp}</span></div>`).join('');
+            } else list.classList.add('hidden');
             updateFilterStats();
             initIcons();
-        };
-
-        const addFavFromResult = (id) => {
-            if(!favorites.includes(id)) { favorites.push(id); localStorage.setItem('STUDY_FAVS', JSON.stringify(favorites)); }
-            updateFilterStats();
-            alert("お気に入りに追加しました");
         };
 
         const callAI = async (prompt, isJson = false) => {
@@ -459,7 +410,7 @@
                     body: JSON.stringify({ contents: [{parts: [{text: prompt}]}], generationConfig: isJson ? { responseMimeType: "application/json" } : {} })
                 });
                 const data = await res.json();
-                const text = data.candidates[0].content.parts[0].text;
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
                 return isJson ? JSON.parse(text) : text;
             } catch (e) { return isJson ? {correct: false} : "Error"; }
         };
@@ -467,6 +418,14 @@
         const saveApiKey = () => {
             const v = document.getElementById('api-key-input').value.trim();
             if(v) { API_KEY = v; localStorage.setItem('GEMINI_API_KEY', v); document.getElementById('api-modal').classList.add('hidden'); }
+        };
+
+        const showSetup = () => {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('setup-screen').classList.remove('hidden');
+            document.getElementById('quiz-screen').classList.add('hidden');
+            document.getElementById('result-screen').classList.add('hidden');
+            initIcons();
         };
     </script>
 </body>
