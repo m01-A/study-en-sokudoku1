@@ -1,486 +1,484 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI英単語学習プロ+ (Setup Fix)</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+JP:wght@400;700&display=swap');
-        body { font-family: 'Inter', 'Noto Sans JP', sans-serif; -webkit-tap-highlight-color: transparent; }
-        .fade-in { animation: fadeIn 0.3s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .shake { animation: shake 0.5s linear; }
-        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
-        .btn-active:active { transform: scale(0.96); transition: 0.1s; }
-    </style>
-</head>
-<body class="bg-slate-50 text-slate-900 min-h-screen">
+import React, { useState, useEffect, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query } from 'firebase/firestore';
+import { 
+  Star, Settings, Play, CheckCircle2, Circle, Search, Plus, 
+  Trash2, Edit3, Save, X, BookOpen, GraduationCap, ChevronRight, RotateCcw
+} from 'lucide-react';
 
-    <div id="app" class="max-w-4xl mx-auto p-4 md:p-8">
-        <!-- API設定モーダル -->
-        <div id="api-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 px-4 hidden">
-            <div class="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full space-y-4">
-                <div class="flex items-center gap-2 text-indigo-600 font-bold text-xl"><i data-lucide="key"></i> API設定</div>
-                <input type="password" id="api-key-input" placeholder="AIza..." class="w-full p-4 border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50">
-                <button onclick="saveApiKey()" class="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 btn-active">保存</button>
-                <button onclick="document.getElementById('api-modal').classList.add('hidden')" class="w-full py-2 text-slate-400 text-sm">閉じる</button>
-            </div>
-        </div>
+// --- Firebase Setup ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'vocab-pro-app';
 
-        <!-- 読み込み中 -->
-        <div id="loading" class="flex flex-col items-center justify-center min-h-[60vh]">
-            <div id="loading-spinner" class="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-indigo-600"></div>
-            <p id="loading-text" class="mt-4 text-slate-500 font-medium">読み込み中...</p>
-        </div>
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [view, setView] = useState('setup'); // setup, quiz, list, edit
+  const [allWords, setAllWords] = useState([]);
+  const [customWords, setCustomWords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  // App State
+  const [filterMode, setFilterMode] = useState('all');
+  const [studyMode, setStudyMode] = useState('en-jp-choice');
+  const [range, setRange] = useState({ start: 1, end: 100 });
+  const [stats, setStats] = useState({});
+  const [favorites, setFavorites] = useState([]);
+  
+  // Quiz State
+  const [quizList, setQuizList] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [isAnswered, setIsAnswered] = useState(false);
+  const [quizResults, setQuizResults] = useState([]);
+  const [userAnswer, setUserAnswer] = useState('');
 
-        <!-- 設定画面 -->
-        <div id="setup-screen" class="hidden fade-in max-w-lg mx-auto bg-white p-8 rounded-3xl shadow-xl border border-slate-100 space-y-8">
-            <div class="flex justify-between items-start">
-                <h1 class="text-3xl font-black text-indigo-600 tracking-tight flex items-center gap-2">
-                    <i data-lucide="award"></i> Vocab Pro+
-                </h1>
-                <button onclick="document.getElementById('api-modal').classList.remove('hidden')" class="p-2 text-slate-300 hover:text-indigo-500">
-                    <i data-lucide="settings"></i>
-                </button>
-            </div>
+  // List State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [editingWord, setEditingWord] = useState(null);
 
-            <div class="space-y-6">
-                <!-- フィルタ選択 -->
-                <div class="space-y-3">
-                    <label class="text-xs font-bold text-slate-500 uppercase tracking-widest">出題対象</label>
-                    <div class="grid grid-cols-3 gap-2" id="filter-group">
-                        <button onclick="setFilter('all')" id="filter-all" class="filter-btn py-3 rounded-xl text-xs font-bold border-2 transition-all border-indigo-600 bg-indigo-50 text-indigo-600">すべて</button>
-                        <button onclick="setFilter('wrong')" id="filter-wrong" class="filter-btn py-3 rounded-xl text-xs font-bold border-2 transition-all border-transparent bg-slate-50 text-slate-400">苦手のみ</button>
-                        <button onclick="setFilter('fav')" id="filter-fav" class="filter-btn py-3 rounded-xl text-xs font-bold border-2 transition-all border-transparent bg-slate-50 text-slate-400">お気に入り</button>
-                    </div>
-                    <p id="filter-stats" class="text-[10px] text-slate-400 text-center"></p>
-                </div>
+  // --- Initial Load & Auth ---
+  useEffect(() => {
+    const initAuth = async () => {
+      await signInAnonymously(auth);
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
 
-                <!-- ID範囲設定 -->
-                <div id="range-settings-container" class="grid grid-cols-2 gap-4 transition-opacity">
-                    <div class="space-y-2">
-                        <label class="text-xs font-bold text-slate-500 uppercase">開始 ID</label>
-                        <input type="number" id="start-idx" value="1" class="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold focus:ring-2 focus:ring-indigo-100">
-                    </div>
-                    <div class="space-y-2">
-                        <label class="text-xs font-bold text-slate-500 uppercase">終了 ID</label>
-                        <input type="number" id="end-idx" value="100" class="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold focus:ring-2 focus:ring-indigo-100">
-                    </div>
-                </div>
+  // --- Data Sync ---
+  useEffect(() => {
+    if (!user) return;
 
-                <!-- 学習形式 -->
-                <div class="space-y-3">
-                    <label class="text-xs font-bold text-slate-500 uppercase tracking-widest">学習形式</label>
-                    <select id="study-mode-select" onchange="updateFormatUI()" class="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none cursor-pointer border-2 border-transparent focus:border-indigo-100">
-                        <option value="en-to-jp">英 ⇒ 日 (理解)</option>
-                        <option value="jp-to-en">日 ⇒ 英 (スペル)</option>
-                        <option value="fill-blank">例文穴埋め (AI)</option>
-                    </select>
-                    <!-- 詳細ボタン (選択肢/入力等) -->
-                    <div id="format-options-group" class="grid grid-cols-3 gap-2 mt-2"></div>
-                </div>
+    // Load static words from uploaded CSV if available, or fallback
+    const loadInitialData = async () => {
+      try {
+        const response = await fetch('words.csv');
+        if (response.ok) {
+          const text = await response.text();
+          const rows = text.split('\n').slice(0).filter(r => r.trim());
+          const parsed = rows.map((row, i) => {
+            const cols = row.split(',');
+            return { id: parseInt(cols[0]) || i + 1, en: cols[1]?.replace(/"/g, '') || '', jp: cols[2]?.replace(/"/g, '') || '' };
+          }).filter(w => w.en);
+          setAllWords(parsed);
+          setRange(prev => ({ ...prev, end: Math.max(...parsed.map(w => w.id), 100) }));
+        }
+      } catch (e) {
+        console.error("CSV Load Error", e);
+      }
+      setLoading(false);
+    };
+    loadInitialData();
 
-                <div id="hint-option-wrapper" class="hidden flex items-center gap-3 p-4 bg-amber-50 rounded-2xl text-amber-700">
-                    <input type="checkbox" id="use-hint" class="w-5 h-5 accent-amber-600 cursor-pointer">
-                    <label for="use-hint" class="text-sm font-bold cursor-pointer select-none">誤答時に1文字ヒントを表示</label>
-                </div>
-            </div>
+    // Sync Custom Words from Firestore
+    const customCol = collection(db, 'artifacts', appId, 'users', user.uid, 'customWords');
+    const unsubCustom = onSnapshot(customCol, (snapshot) => {
+      setCustomWords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
 
-            <button onclick="startStudy()" class="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-xl hover:bg-indigo-700 shadow-lg flex items-center justify-center gap-3 btn-active">
-                <i data-lucide="play-circle"></i> 学習を開始
-            </button>
-        </div>
+    // Sync Stats
+    const statsDoc = doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'stats');
+    const unsubStats = onSnapshot(statsDoc, (doc) => {
+      if (doc.exists()) setStats(doc.data().stats || {});
+    });
 
-        <!-- クイズ画面 -->
-        <div id="quiz-screen" class="hidden max-w-2xl mx-auto space-y-6">
-            <div class="flex justify-between items-center px-4">
-                <span id="progress-text" class="text-xs font-black text-indigo-500 bg-indigo-50 px-4 py-2 rounded-full"></span>
-                <div class="flex items-center gap-4">
-                    <button id="fav-toggle" onclick="toggleFavorite()" class="text-slate-300 hover:text-amber-400 transition-colors">
-                        <i data-lucide="star" id="star-icon"></i>
-                    </button>
-                    <button onclick="showSetup()" class="text-xs font-bold text-slate-400 hover:text-slate-600">中断</button>
-                </div>
-            </div>
+    // Sync Favorites
+    const favDoc = doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'favorites');
+    const unsubFav = onSnapshot(favDoc, (doc) => {
+      if (doc.exists()) setFavorites(doc.data().list || []);
+    });
 
-            <div class="bg-white p-8 md:p-12 rounded-[40px] shadow-2xl border border-slate-100 text-center min-h-[500px] flex flex-col justify-center relative">
-                <div id="ai-status" class="hidden absolute top-6 left-0 right-0 animate-pulse text-indigo-500 text-[10px] font-bold">AI処理中...</div>
-                <div id="quiz-area" class="flex-grow flex flex-col justify-center"></div>
-                <div id="feedback-area" class="hidden mt-8 pt-8 border-t border-slate-50 fade-in"></div>
-                <div class="mt-8">
-                    <button id="action-btn" class="w-full py-5 bg-slate-900 text-white rounded-3xl font-black text-xl hover:bg-black shadow-xl btn-active"></button>
-                </div>
-            </div>
-        </div>
+    return () => { unsubCustom(); unsubStats(); unsubFav(); };
+  }, [user]);
 
-        <!-- 結果画面 -->
-        <div id="result-screen" class="hidden max-w-2xl mx-auto text-center space-y-8">
-            <div class="bg-white p-12 rounded-[40px] shadow-2xl border border-slate-100 space-y-6">
-                <h2 class="text-3xl font-black">学習終了！</h2>
-                <div id="final-score" class="text-7xl font-black text-indigo-600"></div>
-                <div id="wrong-list" class="text-left space-y-2 max-h-60 overflow-y-auto p-4 bg-slate-50 rounded-2xl hidden"></div>
-                <div class="flex flex-col gap-3 mt-10">
-                    <button onclick="startStudy()" class="w-full py-5 bg-indigo-600 text-white rounded-2xl font-bold btn-active">もう一度</button>
-                    <button onclick="showSetup()" class="w-full py-4 text-slate-400 font-bold hover:text-slate-600">トップに戻る</button>
-                </div>
-            </div>
-        </div>
+  // --- Helpers ---
+  const combinedWords = useMemo(() => {
+    return [...allWords, ...customWords];
+  }, [allWords, customWords]);
+
+  const filteredList = useMemo(() => {
+    return combinedWords.filter(w => {
+      const matchesSearch = w.en.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          w.jp.includes(searchQuery);
+      if (filterMode === 'fav') return matchesSearch && favorites.includes(w.id);
+      if (filterMode === 'wrong') return matchesSearch && stats[w.id]?.wrong > 0;
+      if (filterMode === 'all' && view === 'setup') {
+        return w.id >= range.start && w.id <= range.end;
+      }
+      return matchesSearch;
+    });
+  }, [combinedWords, searchQuery, filterMode, favorites, stats, range, view]);
+
+  const saveStats = async (wordId, isCorrect) => {
+    if (!user) return;
+    const newStats = { ...stats };
+    if (!newStats[wordId]) newStats[wordId] = { correct: 0, wrong: 0 };
+    if (isCorrect) newStats[wordId].correct++;
+    else newStats[wordId].wrong++;
+    
+    await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'stats'), { stats: newStats });
+  };
+
+  const toggleFav = async (wordId) => {
+    if (!user) return;
+    const newList = favorites.includes(wordId) 
+      ? favorites.filter(id => id !== wordId) 
+      : [...favorites, wordId];
+    await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'favorites'), { list: newList });
+  };
+
+  const saveCustomWord = async (word) => {
+    if (!user) return;
+    const id = word.id || Date.now().toString();
+    await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'customWords', id), {
+      en: word.en,
+      jp: word.jp,
+      updatedAt: Date.now()
+    });
+    setEditingWord(null);
+  };
+
+  const deleteCustomWord = async (id) => {
+    if (!user || !window.confirm("この単語を削除しますか？")) return;
+    await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'customWords', id));
+  };
+
+  // --- Quiz Logic ---
+  const startQuiz = () => {
+    if (filteredList.length === 0) return alert("対象の単語がありません。");
+    const shuffled = [...filteredList].sort(() => Math.random() - 0.5);
+    setQuizList(shuffled);
+    setCurrentIndex(0);
+    setQuizResults([]);
+    setIsAnswered(false);
+    setIsFlipped(false);
+    setView('quiz');
+  };
+
+  const handleNext = () => {
+    if (currentIndex + 1 < quizList.length) {
+      setCurrentIndex(prev => prev + 1);
+      setIsAnswered(false);
+      setIsFlipped(false);
+      setUserAnswer('');
+    } else {
+      setView('result');
+    }
+  };
+
+  // --- UI Components ---
+  const Layout = ({ children }) => (
+    <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
+      <div className="max-w-2xl mx-auto p-4 pt-8">
+        {children}
+      </div>
+      {/* Bottom Nav */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-3 pb-6 z-40">
+        <button onClick={() => setView('setup')} className={`flex flex-col items-center gap-1 ${view === 'setup' ? 'text-indigo-600' : 'text-slate-400'}`}>
+          <GraduationCap size={24} />
+          <span className="text-[10px] font-bold">学習</span>
+        </button>
+        <button onClick={() => setView('list')} className={`flex flex-col items-center gap-1 ${view === 'list' ? 'text-indigo-600' : 'text-slate-400'}`}>
+          <BookOpen size={24} />
+          <span className="text-[10px] font-bold">一覧・編集</span>
+        </button>
+      </div>
     </div>
+  );
 
-    <script>
-        const API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
-        let API_KEY = localStorage.getItem('GEMINI_API_KEY') || "";
-        
-        let allWords = [];
-        let quizList = [];
-        let currentIndex = 0;
-        let results = [];
-        let currentWord = null;
-        let isAnswering = false;
+  if (loading) return <div className="flex h-screen items-center justify-center font-bold">Loading...</div>;
 
-        let stats = JSON.parse(localStorage.getItem('STUDY_STATS') || "{}");
-        let favorites = JSON.parse(localStorage.getItem('STUDY_FAVS') || "[]");
+  return (
+    <Layout>
+      {view === 'setup' && (
+        <div className="space-y-8 fade-in">
+          <div className="flex justify-between items-end">
+            <div>
+              <h1 className="text-3xl font-black text-indigo-600 tracking-tighter">Vocab Pro</h1>
+              <p className="text-xs text-slate-400 font-bold">Total: {combinedWords.length} words</p>
+            </div>
+            <button className="p-2 bg-white rounded-xl shadow-sm border border-slate-100"><Settings size={20} className="text-slate-400" /></button>
+          </div>
 
-        let filterMode = 'all'; 
-        let studyFormat = 'choice';
+          <div className="bg-white p-6 rounded-3xl shadow-xl border border-slate-100 space-y-6">
+            <div className="space-y-3">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">出題範囲</label>
+              <div className="grid grid-cols-3 gap-2">
+                {['all', 'wrong', 'fav'].map(m => (
+                  <button 
+                    key={m}
+                    onClick={() => setFilterMode(m)}
+                    className={`py-3 rounded-xl text-xs font-bold border-2 transition-all ${filterMode === m ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-transparent bg-slate-50 text-slate-400'}`}
+                  >
+                    {m === 'all' ? 'すべて' : m === 'wrong' ? '苦手' : 'お気に入り'}
+                  </button>
+                ))}
+              </div>
+              {filterMode === 'all' && (
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                  <input type="number" value={range.start} onChange={e => setRange({...range, start: parseInt(e.target.value)})} className="p-3 bg-slate-50 rounded-xl outline-none text-sm font-bold" placeholder="Start ID" />
+                  <input type="number" value={range.end} onChange={e => setRange({...range, end: parseInt(e.target.value)})} className="p-3 bg-slate-50 rounded-xl outline-none text-sm font-bold" placeholder="End ID" />
+                </div>
+              )}
+            </div>
 
-        const initIcons = () => lucide.createIcons();
+            <div className="space-y-3">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">モード</label>
+              <div className="space-y-2">
+                {[
+                  { id: 'flashcard', label: '単語帳 (シンプル)' },
+                  { id: 'en-jp-choice', label: '英 ⇒ 日 (選択肢)' },
+                  { id: 'spell-input', label: 'スペル入力' }
+                ].map(m => (
+                  <button 
+                    key={m.id}
+                    onClick={() => setStudyMode(m.id)}
+                    className={`w-full p-4 rounded-2xl border-2 flex items-center justify-between transition-all ${studyMode === m.id ? 'border-indigo-600 bg-indigo-50' : 'border-transparent bg-slate-50'}`}
+                  >
+                    <span className={`font-bold ${studyMode === m.id ? 'text-indigo-600' : 'text-slate-600'}`}>{m.label}</span>
+                    {studyMode === m.id ? <CheckCircle2 size={18} className="text-indigo-600" /> : <Circle size={18} className="text-slate-200" />}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        // CSV読み込み (複数候補)
-        const loadCSV = async () => {
-            const candidates = ['words.xlsx%20-%20%E3%82%B7%E3%83%BC%E3%83%881.csv', 'words.csv', './words.csv'];
-            for (let name of candidates) {
-                try {
-                    const res = await fetch(name);
-                    if (res.ok) {
-                        const text = await res.text();
-                        const lines = text.split(/\r?\n/).filter(l => l.trim());
-                        return lines.map(line => {
-                            const m = line.match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g) || [];
-                            const clean = (s) => (s || "").replace(/^"|"$/g, '').trim();
-                            return { id: parseInt(clean(m[0])), en: clean(m[1]), jp: clean(m[2]) };
-                        }).filter(w => !isNaN(w.id) && w.en && w.jp);
+            <button onClick={startQuiz} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-xl shadow-lg shadow-indigo-200 flex items-center justify-center gap-2 active:scale-95 transition-transform">
+              <Play fill="currentColor" size={20} /> 学習を開始
+            </button>
+          </div>
+        </div>
+      )}
+
+      {view === 'quiz' && quizList.length > 0 && (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center px-2">
+            <span className="text-xs font-black text-indigo-500 bg-indigo-50 px-4 py-2 rounded-full">
+              {currentIndex + 1} / {quizList.length}
+            </span>
+            <button onClick={() => toggleFav(quizList[currentIndex].id)} className={favorites.includes(quizList[currentIndex].id) ? 'text-amber-400' : 'text-slate-300'}>
+              <Star fill={favorites.includes(quizList[currentIndex].id) ? 'currentColor' : 'none'} />
+            </button>
+          </div>
+
+          <div className="bg-white p-8 rounded-[40px] shadow-2xl border border-slate-100 min-h-[400px] flex flex-col items-center justify-center text-center relative overflow-hidden">
+            {studyMode === 'flashcard' ? (
+              <div 
+                className={`w-full transition-all duration-500 cursor-pointer ${isFlipped ? '[transform:rotateY(180deg)]' : ''}`}
+                style={{ transformStyle: 'preserve-3d' }}
+                onClick={() => !isAnswered && setIsFlipped(!isFlipped)}
+              >
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-4 [backface-visibility:hidden]">
+                  <h2 className="text-5xl font-black text-slate-800">{quizList[currentIndex].en}</h2>
+                  <p className="mt-8 text-slate-300 text-sm font-bold">タップで裏返す</p>
+                </div>
+                <div className="flex flex-col items-center justify-center p-4 [backface-visibility:hidden] [transform:rotateY(180deg)]">
+                  <h2 className="text-4xl font-bold text-indigo-600">{quizList[currentIndex].jp}</h2>
+                </div>
+              </div>
+            ) : studyMode === 'en-jp-choice' ? (
+              <div className="w-full space-y-8">
+                <h2 className="text-5xl font-black text-slate-800">{quizList[currentIndex].en}</h2>
+                <div className="grid gap-2">
+                  {useMemo(() => {
+                    const correct = quizList[currentIndex].jp;
+                    const dummies = allWords.filter(w => w.jp !== correct).sort(() => Math.random() - 0.5).slice(0, 3).map(w => w.jp);
+                    return [correct, ...dummies].sort(() => Math.random() - 0.5);
+                  }, [currentIndex]).map(choice => (
+                    <button 
+                      key={choice}
+                      disabled={isAnswered}
+                      onClick={() => {
+                        const ok = choice === quizList[currentIndex].jp;
+                        setIsAnswered(true);
+                        setQuizResults([...quizResults, { ...quizList[currentIndex], ok }]);
+                        saveStats(quizList[currentIndex].id, ok);
+                        setUserAnswer(choice);
+                      }}
+                      className={`p-4 rounded-2xl font-bold text-left transition-all border-2 ${
+                        isAnswered 
+                          ? choice === quizList[currentIndex].jp ? 'bg-green-50 border-green-200 text-green-700' : choice === userAnswer ? 'bg-red-50 border-red-200 text-red-700' : 'bg-slate-50 border-transparent'
+                          : 'bg-slate-50 border-transparent hover:border-indigo-100'
+                      }`}
+                    >
+                      {choice}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="w-full space-y-8">
+                <h2 className="text-4xl font-bold text-slate-800">{quizList[currentIndex].jp}</h2>
+                <input 
+                  type="text" 
+                  autoFocus
+                  value={userAnswer}
+                  onChange={e => setUserAnswer(e.target.value)}
+                  disabled={isAnswered}
+                  className="w-full p-5 bg-slate-50 rounded-2xl text-center text-2xl font-black outline-none border-2 border-transparent focus:border-indigo-200"
+                  placeholder="英単語を入力"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !isAnswered) {
+                      const ok = userAnswer.trim().toLowerCase() === quizList[currentIndex].en.toLowerCase();
+                      setIsAnswered(true);
+                      setQuizResults([...quizResults, { ...quizList[currentIndex], ok }]);
+                      saveStats(quizList[currentIndex].id, ok);
                     }
-                } catch (e) {}
-            }
-            throw new Error("CSVファイルが見つかりません。");
-        };
+                  }}
+                />
+                {isAnswered && (
+                  <div className="fade-in">
+                    <p className={`text-xl font-black ${userAnswer.trim().toLowerCase() === quizList[currentIndex].en.toLowerCase() ? 'text-green-500' : 'text-red-400'}`}>
+                      {quizList[currentIndex].en}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
-        window.onload = async () => {
-            try {
-                allWords = await loadCSV();
-                document.getElementById('end-idx').value = Math.max(...allWords.map(w => w.id));
-                updateFilterStats();
-                updateFormatUI();
-                showSetup();
-            } catch (e) {
-                document.getElementById('loading-spinner').classList.add('hidden');
-                document.getElementById('loading-text').innerText = e.message;
-            }
-            initIcons();
-        };
+            {(studyMode === 'flashcard' && isFlipped && !isAnswered) && (
+              <div className="mt-8 flex gap-3 w-full animate-bounce">
+                <button onClick={() => { setIsAnswered(true); saveStats(quizList[currentIndex].id, false); setQuizResults([...quizResults, {...quizList[currentIndex], ok: false}]); }} className="flex-1 py-4 bg-red-50 text-red-500 rounded-2xl font-black">わからない</button>
+                <button onClick={() => { setIsAnswered(true); saveStats(quizList[currentIndex].id, true); setQuizResults([...quizResults, {...quizList[currentIndex], ok: true}]); }} className="flex-1 py-4 bg-green-50 text-green-600 rounded-2xl font-black">わかる！</button>
+              </div>
+            )}
+          </div>
 
-        // フィルタ設定
-        const setFilter = (mode) => {
-            filterMode = mode;
-            document.querySelectorAll('.filter-btn').forEach(b => {
-                const isMatch = b.id === `filter-${mode}`;
-                b.className = `filter-btn py-3 rounded-xl text-xs font-bold border-2 transition-all ${isMatch ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-transparent bg-slate-50 text-slate-400'}`;
-            });
-            // 「すべて」以外は範囲指定を無効化（視覚的）
-            const rangeUI = document.getElementById('range-settings-container');
-            rangeUI.style.opacity = mode === 'all' ? '1' : '0.4';
-            rangeUI.style.pointerEvents = mode === 'all' ? 'auto' : 'none';
-        };
+          {isAnswered && (
+            <button onClick={handleNext} className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-xl shadow-xl flex items-center justify-center gap-2">
+              NEXT <ChevronRight />
+            </button>
+          )}
+        </div>
+      )}
 
-        const updateFilterStats = () => {
-            const wrongCount = Object.values(stats).filter(s => s.wrong > 0).length;
-            const favCount = favorites.length;
-            document.getElementById('filter-stats').innerText = `苦手: ${wrongCount}件 | お気に入り: ${favCount}件`;
-        };
+      {view === 'result' && (
+        <div className="space-y-6 text-center fade-in">
+          <div className="bg-white p-12 rounded-[40px] shadow-2xl space-y-4">
+            <h2 className="text-2xl font-black">Finish!</h2>
+            <div className="text-7xl font-black text-indigo-600">
+              {quizResults.filter(r => r.ok).length} <span className="text-2xl text-slate-300">/ {quizList.length}</span>
+            </div>
+            <div className="pt-6 grid grid-cols-2 gap-2">
+              <button onClick={startQuiz} className="p-4 bg-indigo-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2"><RotateCcw size={18} /> Replay</button>
+              <button onClick={() => setView('setup')} className="p-4 bg-slate-100 text-slate-600 rounded-2xl font-bold">Home</button>
+            </div>
+          </div>
+          
+          {quizResults.some(r => !r.ok) && (
+            <div className="bg-white rounded-3xl p-6 text-left shadow-lg">
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">復習が必要な単語</h3>
+              <div className="space-y-2">
+                {quizResults.filter(r => !r.ok).map(w => (
+                  <div key={w.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
+                    <span className="font-bold text-slate-700">{w.en}</span>
+                    <span className="text-sm text-slate-400">{w.jp}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
-        // 学習形式（大枠）の変更
-        const updateFormatUI = () => {
-            const mode = document.getElementById('study-mode-select').value;
-            const container = document.getElementById('format-options-group');
-            const hintWrap = document.getElementById('hint-option-wrapper');
-            
-            hintWrap.classList.toggle('hidden', mode !== 'jp-to-en');
-            
-            let html = '';
-            if (mode === 'en-to-jp') {
-                html = `
-                    <button onclick="setFormat('choice')" id="fmt-choice" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 transition-all border-indigo-600 bg-indigo-50 text-indigo-600">選択肢</button>
-                    <button onclick="setFormat('input')" id="fmt-input" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 transition-all border-transparent bg-slate-50 text-slate-400">入力(AI)</button>
-                    <button onclick="setFormat('flash')" id="fmt-flash" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 transition-all border-transparent bg-slate-50 text-slate-400">カード</button>
-                `;
-                studyFormat = 'choice';
-            } else if (mode === 'jp-to-en') {
-                html = `
-                    <button onclick="setFormat('input')" id="fmt-input" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 transition-all border-indigo-600 bg-indigo-50 text-indigo-600">スペル入力</button>
-                    <button onclick="setFormat('flash')" id="fmt-flash" class="fmt-btn py-3 rounded-xl text-xs font-bold border-2 transition-all border-transparent bg-slate-50 text-slate-400">カード</button>
-                    <div class="p-2"></div>
-                `;
-                studyFormat = 'input';
-            } else {
-                html = `<div class="col-span-3 text-[10px] text-slate-400 py-4 border-2 border-dashed border-slate-100 rounded-xl">AIが作成した例文の穴埋め問題を行います。</div>`;
-                studyFormat = 'input';
-            }
-            container.innerHTML = html;
-        };
+      {view === 'list' && (
+        <div className="space-y-6 fade-in">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-black">単語帳リスト</h2>
+            <button 
+              onClick={() => setEditingWord({ en: '', jp: '' })}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-full text-xs font-bold flex items-center gap-1 shadow-md shadow-indigo-100"
+            >
+              <Plus size={16} /> 新規作成
+            </button>
+          </div>
 
-        // 詳細フォーマットの切り替え
-        const setFormat = (fmt) => {
-            studyFormat = fmt;
-            document.querySelectorAll('.fmt-btn').forEach(b => {
-                const isMatch = b.id === `fmt-${fmt}`;
-                b.className = `fmt-btn py-3 rounded-xl text-xs font-bold border-2 transition-all ${isMatch ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-transparent bg-slate-50 text-slate-400'}`;
-            });
-        };
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input 
+              type="text" 
+              placeholder="単語を検索..." 
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full p-4 pl-12 bg-white rounded-2xl shadow-sm border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-100"
+            />
+          </div>
 
-        const startStudy = () => {
-            const start = parseInt(document.getElementById('start-idx').value) || 1;
-            const end = parseInt(document.getElementById('end-idx').value) || 9999;
-            
-            let pool = [];
-            if (filterMode === 'fav') {
-                pool = allWords.filter(w => favorites.includes(w.id));
-            } else if (filterMode === 'wrong') {
-                pool = allWords.filter(w => stats[w.id]?.wrong > 0);
-            } else {
-                pool = allWords.filter(w => w.id >= start && w.id <= end);
-            }
-            
-            if (pool.length === 0) {
-                alert("条件に合う単語がありません。設定を確認してください。");
-                return;
-            }
-            
-            quizList = [...pool].sort(() => Math.random() - 0.5);
-            currentIndex = 0; results = [];
-            document.getElementById('setup-screen').classList.add('hidden');
-            document.getElementById('quiz-screen').classList.remove('hidden');
-            loadNext();
-        };
-
-        const loadNext = async () => {
-            if (currentIndex >= quizList.length) return finish();
-            currentWord = quizList[currentIndex];
-            isAnswering = false;
-
-            const area = document.getElementById('quiz-area');
-            const feedback = document.getElementById('feedback-area');
-            const actionBtn = document.getElementById('action-btn');
-            const status = document.getElementById('ai-status');
-
-            document.getElementById('progress-text').innerText = `${currentIndex + 1} / ${quizList.length}`;
-            document.getElementById('star-icon').style.fill = favorites.includes(currentWord.id) ? "currentColor" : "none";
-            document.getElementById('fav-toggle').classList.toggle('text-amber-400', favorites.includes(currentWord.id));
-            
-            feedback.classList.add('hidden');
-            status.classList.add('hidden');
-            actionBtn.classList.remove('hidden');
-            actionBtn.disabled = false;
-            actionBtn.innerText = "CHECK";
-
-            const mode = document.getElementById('study-mode-select').value;
-
-            if (studyFormat === 'flash') {
-                renderFlash(area, actionBtn, mode);
-            } else if (studyFormat === 'choice') {
-                renderChoices(area, actionBtn);
-            } else {
-                if (mode === 'fill-blank') {
-                    status.classList.remove('hidden'); 
-                    actionBtn.disabled = true;
-                    actionBtn.innerText = "AI PREPARING...";
-                    const s = await callAI(`単語 "${currentWord.en}" を使った短い英作文を1つ作成しJSON形式で返せ: {"english": "sentence", "japanese": "訳", "cloze": "____ version"}`, true);
-                    currentWord.full = s.english;
-                    renderInput(area, actionBtn, s.cloze || "Error", s.japanese || "例文を取得できませんでした");
-                    status.classList.add('hidden'); 
-                    actionBtn.disabled = false;
-                    actionBtn.innerText = "CHECK";
-                } else {
-                    renderInput(area, actionBtn, mode === 'en-to-jp' ? currentWord.en : currentWord.jp);
-                }
-            }
-            initIcons();
-        };
-
-        const renderFlash = (area, btn, mode) => {
-            const q = mode === 'en-to-jp' ? currentWord.en : currentWord.jp;
-            const a = mode === 'en-to-jp' ? currentWord.jp : currentWord.en;
-            area.innerHTML = `
-                <div onclick="this.querySelector('.back').classList.toggle('hidden')" class="w-full bg-slate-50 border-4 border-indigo-100 rounded-[40px] aspect-square flex flex-col items-center justify-center p-8 cursor-pointer shadow-inner btn-active">
-                    <div class="text-5xl font-black text-indigo-600 mb-4">${q}</div>
-                    <div class="back hidden animate-fade-in text-2xl font-bold text-slate-500 pt-6 border-t w-full border-indigo-100">${a}</div>
+          <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden">
+            <div className="max-h-[60vh] overflow-y-auto divide-y divide-slate-50">
+              {filteredList.map(w => (
+                <div key={w.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                  <div className="flex-grow">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-800">{w.en}</span>
+                      <span className="text-[10px] text-slate-300 font-mono">#{w.id}</span>
+                    </div>
+                    <p className="text-sm text-slate-400 truncate max-w-[200px]">{w.jp}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => toggleFav(w.id)} className={favorites.includes(w.id) ? 'text-amber-400' : 'text-slate-200'}>
+                      <Star size={18} fill={favorites.includes(w.id) ? 'currentColor' : 'none'} />
+                    </button>
+                    {customWords.some(cw => cw.id === w.id) && (
+                      <div className="flex gap-2">
+                        <button onClick={() => setEditingWord(w)} className="text-slate-300 hover:text-indigo-400"><Edit3 size={18} /></button>
+                        <button onClick={() => deleteCustomWord(w.id)} className="text-slate-300 hover:text-red-400"><Trash2 size={18} /></button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <p class="mt-4 text-[10px] text-slate-300 font-bold uppercase tracking-widest">Tap to Flip</p>
-            `;
-            btn.innerText = "NEXT";
-            btn.onclick = () => handleAnswer(true);
-        };
+              ))}
+              {filteredList.length === 0 && (
+                <div className="p-12 text-center text-slate-400 font-bold">単語が見つかりません</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
-        const renderChoices = (area, btn) => {
-            btn.classList.add('hidden');
-            const correct = currentWord.jp;
-            const dummies = allWords.filter(w => w.id !== currentWord.id).sort(() => Math.random() - 0.5).slice(0, 3).map(w => w.jp);
-            const choices = [correct, ...dummies].sort(() => Math.random() - 0.5);
-            area.innerHTML = `
-                <h2 class="text-6xl font-black text-slate-800 mb-12">${currentWord.en}</h2>
-                <div class="grid grid-cols-1 gap-3">
-                    ${choices.map(c => `
-                        <button onclick="checkChoice('${c}', '${correct}')" class="choice-btn p-5 bg-slate-50 rounded-2xl font-bold text-left hover:bg-indigo-50 border-2 border-transparent hover:border-indigo-100 transition-all active:scale-[0.98]">
-                            ${c}
-                        </button>
-                    `).join('')}
-                </div>
-            `;
-        };
-
-        const renderInput = (area, btn, q, sub = "") => {
-            area.innerHTML = `
-                <h2 class="${sub ? 'text-2xl italic text-slate-400 mb-4' : 'text-5xl font-black text-slate-800 mb-12'}">${q}</h2>
-                ${sub ? `<p class="text-indigo-600 font-bold mb-8">${sub}</p>` : ''}
-                <input type="text" id="user-input" autocomplete="off" placeholder="解答を入力..." class="w-full text-center text-3xl p-6 bg-slate-50 rounded-[30px] outline-none focus:ring-4 focus:ring-indigo-100 font-black">
-                <div id="hint-area" class="mt-4 text-amber-500 font-bold h-6 text-sm"></div>
-            `;
-            const input = document.getElementById('user-input');
-            input.focus();
-            input.onkeydown = (e) => { if(e.key === 'Enter') checkInput(); };
-            btn.onclick = checkInput;
-        };
-
-        const checkChoice = (sel, cor) => {
-            if (isAnswering) return;
-            isAnswering = true;
-            const ok = sel === cor;
-            document.querySelectorAll('.choice-btn').forEach(b => {
-                b.disabled = true;
-                if(b.innerText === cor) b.classList.add('ring-4', 'ring-green-400', 'bg-green-50', 'text-green-700');
-                else if(b.innerText === sel) b.classList.add('bg-red-50', 'text-red-400');
-            });
-            handleAnswer(ok);
-        };
-
-        const checkInput = async () => {
-            if (isAnswering) return;
-            const val = document.getElementById('user-input').value.trim();
-            if(!val) return;
-            
-            isAnswering = true;
-            const mode = document.getElementById('study-mode-select').value;
-            let ok = false;
-
-            if (mode === 'en-to-jp' && studyFormat === 'input') {
-                document.getElementById('ai-status').classList.remove('hidden');
-                const res = await callAI(`単語 "${currentWord.en}" の意味として "${val}" は正解ですか？定義: "${currentWord.jp}"。回答はJSONのみ: {"correct": true/false}`, true);
-                ok = !!res.correct;
-                document.getElementById('ai-status').classList.add('hidden');
-            } else {
-                ok = val.toLowerCase() === currentWord.en.toLowerCase();
-            }
-
-            if (!ok && mode === 'jp-to-en' && document.getElementById('use-hint').checked && !document.getElementById('hint-area').innerText) {
-                document.getElementById('hint-area').innerText = `ヒント: ${currentWord.en[0]}...`;
-                document.getElementById('user-input').classList.add('shake');
-                setTimeout(() => document.getElementById('user-input').classList.remove('shake'), 500);
-                isAnswering = false; 
-            } else {
-                handleAnswer(ok);
-            }
-        };
-
-        const handleAnswer = (ok) => {
-            const btn = document.getElementById('action-btn');
-            const fb = document.getElementById('feedback-area');
-            const input = document.getElementById('user-input');
-            if(input) input.disabled = true;
-
-            if(!stats[currentWord.id]) stats[currentWord.id] = { correct: 0, wrong: 0 };
-            if(ok) stats[currentWord.id].correct++; else stats[currentWord.id].wrong++;
-            localStorage.setItem('STUDY_STATS', JSON.stringify(stats));
-
-            results.push({ ...currentWord, ok });
-
-            btn.classList.remove('hidden');
-            btn.innerText = "NEXT";
-            btn.onclick = () => { currentIndex++; loadNext(); };
-            
-            fb.classList.remove('hidden');
-            fb.innerHTML = ok ? 
-                `<div class="text-green-500 font-black text-2xl flex items-center justify-center gap-2"><i data-lucide="check-circle"></i> 正解！</div>` : 
-                `<div class="space-y-1"><p class="text-3xl font-black text-slate-800">${currentWord.en}</p><p class="text-indigo-600 font-bold">${currentWord.jp}</p></div>`;
-            
-            if(currentWord.full) fb.innerHTML += `<p class="mt-4 text-[11px] text-slate-400 italic font-medium">"${currentWord.full}"</p>`;
-            initIcons();
-            btn.focus();
-        };
-
-        const toggleFavorite = () => {
-            if (favorites.includes(currentWord.id)) {
-                favorites = favorites.filter(id => id !== currentWord.id);
-            } else {
-                favorites.push(currentWord.id);
-            }
-            localStorage.setItem('STUDY_FAVS', JSON.stringify(favorites));
-            const star = document.getElementById('star-icon');
-            star.style.fill = favorites.includes(currentWord.id) ? "currentColor" : "none";
-            document.getElementById('fav-toggle').classList.toggle('text-amber-400', favorites.includes(currentWord.id));
-        };
-
-        const finish = () => {
-            document.getElementById('quiz-screen').classList.add('hidden');
-            document.getElementById('result-screen').classList.remove('hidden');
-            const score = results.filter(r => r.ok).length;
-            document.getElementById('final-score').innerText = `${score} / ${quizList.length}`;
-            
-            const wrongOnes = results.filter(r => !r.ok);
-            const list = document.getElementById('wrong-list');
-            if (wrongOnes.length > 0) {
-                list.classList.remove('hidden');
-                list.innerHTML = `<p class="text-[10px] font-bold text-slate-400 uppercase mb-2 border-b pb-1">間違えた単語</p>` + 
-                    wrongOnes.map(w => `<div class="flex justify-between items-center text-sm py-2 border-b border-slate-50"><span><b class="text-indigo-600">${w.en}</b> <span class="text-slate-400 ml-2">${w.jp}</span></span></div>`).join('');
-            } else {
-                list.classList.add('hidden');
-            }
-            updateFilterStats();
-            initIcons();
-        };
-
-        const callAI = async (prompt, isJson = false) => {
-            if (!API_KEY) return isJson ? {correct: false} : "API Key Required";
-            try {
-                const res = await fetch(`${API_ENDPOINT}?key=${API_KEY}`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        contents: [{parts: [{text: prompt}]}],
-                        generationConfig: isJson ? { responseMimeType: "application/json" } : {}
-                    })
-                });
-                const data = await res.json();
-                const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-                return isJson ? JSON.parse(text) : text;
-            } catch (e) { return isJson ? {correct: false} : "AI Error"; }
-        };
-
-        const saveApiKey = () => {
-            const v = document.getElementById('api-key-input').value.trim();
-            if(v) { API_KEY = v; localStorage.setItem('GEMINI_API_KEY', v); document.getElementById('api-modal').classList.add('hidden'); }
-        };
-
-        const showSetup = () => {
-            document.getElementById('loading').classList.add('hidden');
-            document.getElementById('setup-screen').classList.remove('hidden');
-            document.getElementById('quiz-screen').classList.add('hidden');
-            document.getElementById('result-screen').classList.add('hidden');
-            updateFilterStats();
-            initIcons();
-        };
-    </script>
-</body>
-</html>
+      {editingWord && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-[32px] p-8 space-y-6 shadow-2xl animate-in slide-in-from-bottom duration-300">
+            <div className="flex justify-between items-center">
+              <h3 className="text-xl font-black">{editingWord.id ? '単語を編集' : '新しい単語'}</h3>
+              <button onClick={() => setEditingWord(null)} className="p-2 text-slate-300"><X /></button>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">英単語</label>
+                <input 
+                  type="text" 
+                  value={editingWord.en} 
+                  onChange={e => setEditingWord({...editingWord, en: e.target.value})}
+                  className="w-full p-4 bg-slate-50 rounded-2xl outline-none border-2 border-transparent focus:border-indigo-100 font-bold"
+                  placeholder="Example"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">日本語訳</label>
+                <input 
+                  type="text" 
+                  value={editingWord.jp} 
+                  onChange={e => setEditingWord({...editingWord, jp: e.target.value})}
+                  className="w-full p-4 bg-slate-50 rounded-2xl outline-none border-2 border-transparent focus:border-indigo-100 font-bold"
+                  placeholder="例、見本"
+                />
+              </div>
+            </div>
+            <button 
+              onClick={() => saveCustomWord(editingWord)}
+              className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-lg flex items-center justify-center gap-2 shadow-lg shadow-indigo-100"
+            >
+              <Save size={20} /> 保存する
+            </button>
+          </div>
+        </div>
+      )}
+    </Layout>
+  );
+}
 
